@@ -1,36 +1,40 @@
+// services/categories.ts
 import { supabase } from "../lib/supabase";
 import { Category } from "../constants/categories";
 
-export async function fetchCategories(userId: string) {
-  return supabase
+export async function addCategory(
+  label: string,
+  color: string,
+  userId: string
+): Promise<Category> {
+  const { data, error } = await supabase
     .from("categories")
-    .select("id, label, color")
-    .eq("user_id", userId)
-    .order("created_at");
-}
-
-export async function insertCategory(
-  userId: string,
-  category: Category
-) {
-  return supabase.from("categories").insert({
-    id: category.id,
-    user_id: userId,
-    label: category.label,
-    color: category.color,
-  });
-}
-
-export async function deleteCategory(categoryId: string) {
-  return supabase.from("categories").delete().eq("id", categoryId);
-}
-
-export async function updateCategory(category: Category) {
-  return supabase
-    .from("categories")
-    .update({
-      label: category.label,
-      color: category.color,
+    .insert({
+      user_id: userId,
+      label,
+      color,
     })
-    .eq("id", category.id);
+    .select()
+    .single();
+
+  if (error || !data) {
+    console.error(error);
+    throw new Error("Failed to add category");
+  }
+
+  return data;
+}
+
+
+
+
+export async function fetchCategories(userId: string) {
+  const { data, error } = await supabase
+    .from("categories")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  return data;
 }

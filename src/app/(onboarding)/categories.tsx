@@ -1,43 +1,84 @@
+import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
-import { useState } from "react";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import uuid from "react-native-uuid";
+
 import { CATEGORY_COLORS } from "../../constants/categoryColors";
-import { Category, CATEGORIES } from "../../constants/categories";
-import React from "react";
+import { Category } from "../../constants/categories";
+import { addCategory, fetchCategories } from "../../services/categories";
+import { useAuthStore } from "../../store/useAuthStore";
+import { supabase } from "../../lib/supabase";
+
+/* ------------------ DEFAULT CATEGORIES ------------------ */
+
+const DEFAULT_CATEGORIES = [
+  { label: "School", color: "#4DA3FF" },
+  { label: "Gym", color: "#18C964" },
+  { label: "Work", color: "#FFB020" },
+  { label: "Deep Focus", color: "#8B5CF6" },
+];
+
+/* ------------------ SCREEN ------------------ */
 
 export default function OnboardingCategoriesScreen() {
-  // Start from predefined categories
-  const [categories, setCategories] = useState<Category[]>([...CATEGORIES]);
+  /* ---------- AUTH ---------- */
+  const authUser = useAuthStore((s) => s.user);
 
+  if (!authUser) {
+    return (
+      <View style={styles.container}>
+        <Text style={{ color: "#FFFFFF" }}>Loading...</Text>
+      </View>
+    );
+  }
+
+  const userId = authUser.id;
+
+  /* ---------- STATE ---------- */
+  const [categories, setCategories] = useState<Category[]>([]);
   const [label, setLabel] = useState("");
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
 
-  const usedColors = categories.map(c => c.color);
+  /* ---------- DERIVED ---------- */
+  const usedColors = categories.map((c) => c.color);
   const availableColors = CATEGORY_COLORS.filter(
-    color => !usedColors.includes(color)
+    (color) => !usedColors.includes(color)
   );
 
-  function addCategory() {
-    if (!label || !selectedColor) return;
+  /* ---------- INIT (SEED + FETCH) ---------- */
+  useEffect(() => {
+    if (initialized) return;
 
-    setCategories(prev => [
-      ...prev,
-      {
-        id: uuid.v4().toString(),
-        label,
-        color: selectedColor,
-      },
-    ]);
+    async function initCategories() {
+      // Check if user already has categories
+      const { data: existing } = await supabase
+        .from("categories")
+        .select("id")
+        .eq("user_id", userId)
+        .limit(1);
 
-    setLabel("");
-    setSelectedColor(null);
-  }
+      // Seed defaults if none exist
+      if (!existing || existing.length === 0) {
+        await supabase.from("categories").insert(
+          DEFAULT_CATEGORIES.map((cat) => ({
+            user_id: userId,
+            label: cat.label,
+            color: cat.color,
+          }))
+        );
+      }
 
-  function deleteCategory(id: string) {
-    setCategories(prev => prev.filter(c => c.id !== id));
-  }
+      // Fetch categories
+      const data = await fetchCategories(userId);
+      setCategories(data);
+      setInitialized(true);
+    }
+
+    initCategories();
+  }, [userId, initialized]);
+
+  /* ------------------ RENDER ------------------ */
 
   return (
     <View style={styles.container}>
@@ -57,13 +98,13 @@ export default function OnboardingCategoriesScreen() {
 
       {/* Category Pills */}
       <View style={styles.pills}>
-        {categories.map(category => (
+        {categories.map((category) => (
           <View
             key={category.id}
             style={[styles.pill, { backgroundColor: category.color }]}
           >
             <Text style={styles.pillText}>{category.label}</Text>
-            <Pressable onPress={() => deleteCategory(category.id)}>
+            <Pressable>
               <Ionicons name="close" size={14} color="#FFFFFF" />
             </Pressable>
           </View>
@@ -83,7 +124,7 @@ export default function OnboardingCategoriesScreen() {
 
       {/* Color Picker */}
       <View style={styles.colorPicker}>
-        {availableColors.map(color => (
+        {availableColors.map((color) => (
           <Pressable
             key={color}
             onPress={() => setSelectedColor(color)}
@@ -98,12 +139,24 @@ export default function OnboardingCategoriesScreen() {
 
       {/* Add Button */}
       <Pressable
-        onPress={addCategory}
         disabled={!label || !selectedColor}
         style={[
           styles.addButton,
           (!label || !selectedColor) && styles.addDisabled,
         ]}
+        onPress={async () => {
+          if (!label || !selectedColor) return;
+
+          const newCategory = await addCategory(
+            label,
+            selectedColor,
+            userId
+          );
+
+          setCategories((prev) => [...prev, newCategory]);
+          setLabel("");
+          setSelectedColor(null);
+        }}
       >
         <Ionicons name="add" size={18} color="#FFFFFF" />
       </Pressable>
@@ -111,10 +164,7 @@ export default function OnboardingCategoriesScreen() {
       {/* Continue */}
       <Pressable
         disabled={categories.length === 0}
-        onPress={() => {
-          console.log("Final onboarding categories:", categories);
-          router.push("/(onboarding)/ready"); // adjust to your flow
-        }}
+        onPress={() => router.push("/(onboarding)/ready")}
         style={[
           styles.continue,
           categories.length === 0 && styles.continueDisabled,

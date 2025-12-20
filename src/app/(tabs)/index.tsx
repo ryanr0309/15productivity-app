@@ -4,7 +4,7 @@ import { colors } from "../../constants/colors";
 import TimeBlockCard from "../../components/time-block/TimeBlockCard";
 import ProgressBar from "../../components/ui/ProgressBar";
 import { generateTimeBlocks } from "../../utils/timeBlocks";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import React from "react";
 import TimeBlockModal from "../../components/time-block/TimeBlockModal";
 import TimePickerModal from "../../components/config/TimePickerModal";
@@ -16,6 +16,7 @@ import { Category } from "../../constants/categories";
 import { supabase } from "../../lib/supabase";
 import LogoutButton from "../../components/auth/LogoutButton";
 import { router } from "expo-router";
+import { useAuthStore } from "../../store/useAuthStore";
 
 
 supabase.auth.signOut();
@@ -27,6 +28,8 @@ const MOCK_CONFIG = {
 };
 
 export default function Home() {
+
+
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [dailyGoals, setDailyGoals] = useState<string[]>([
