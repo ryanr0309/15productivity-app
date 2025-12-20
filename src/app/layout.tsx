@@ -1,17 +1,14 @@
+import React, { useEffect, useState } from "react";
 import { Stack } from "expo-router";
-import React from "react";
 
 export default function RootLayout() {
+ 
+  // 3️⃣ Only render Stack when route is valid
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
-      {/* Route groups */}
-      <Stack.Screen name="(auth)" options={{headerShown: false}} />
-      <Stack.Screen name="(onboarding)" options={{headerShown: false, title: 'Onboarding'}}/>
-      <Stack.Screen name="(tabs)" options={{headerShown: false, title: 'Tabs'}}/>
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(auth)" />
+      <Stack.Screen name="(onboarding)" />
+      <Stack.Screen name="(tabs)" />
     </Stack>
   );
 }

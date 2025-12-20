@@ -13,6 +13,12 @@ import formatTime from "../../utils/time";
 import { dateToHHMM } from "../../utils/dateToHHMM";
 import DailyGoalsModal from "../../components/config/DailyGoalsModal";
 import { Category } from "../../constants/categories";
+import { supabase } from "../../lib/supabase";
+import LogoutButton from "../../components/auth/LogoutButton";
+import { router } from "expo-router";
+
+
+supabase.auth.signOut();
 
 const MOCK_CONFIG = {
   wakeTime: "09:00",
@@ -134,9 +140,13 @@ function isFutureBlock(timeLabel: string): boolean {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
+      
 
       {/* HEADER */}
 <View style={styles.header}>
+  <Pressable onPress={() => router.push("/(auth)/login")}>
+  <Text>GO TO LOGIN</Text>
+</Pressable>
   <View style={styles.headerTop}>
     <Text style={styles.logo}>⏰</Text>
     <Text style={styles.title}>15 Productivity</Text>
@@ -148,6 +158,10 @@ function isFutureBlock(timeLabel: string): boolean {
     <View style={styles.line} />
   </View>
 </View>
+
+<View style={{ position: "absolute", top: 50, right: 20 }}>
+        <LogoutButton />
+      </View>
 
 {/* CONFIG GRID (2x2) */}
 <View style={styles.configGrid}>

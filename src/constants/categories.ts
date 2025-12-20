@@ -21,7 +21,7 @@ export const CATEGORIES: Category[] = [
     color: "#FFB020",
   },
   {
-    id: "focus",
+    id: "phone",
     label: "Deep Focus",
     color: "#8B5CF6",
   },
