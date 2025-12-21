@@ -1,14 +1,15 @@
 // utils/timeBlocks.ts
 
-export type TimeBlock = {
+export type Block = {
   id: string;
-  timeLabel: string;
+  startTime: string;     // "HH:MM"
+  endTime: string;       // "HH:MM"
+  timeLabel: string;     // "8:00AM – 8:45AM"
   completed: boolean;
-
-  // NEW 👇
   categoryId: string | null;
   description: string;
 };
+
 
 /**
  * Converts "HH:mm" to minutes since midnight
@@ -38,8 +39,8 @@ export function generateTimeBlocks(
   wakeTime: string,
   sleepTime: string,
   intervalMinutes: number
-): TimeBlock[] {
-  const blocks: TimeBlock[] = [];
+): Block[] {
+  const blocks: Block[] = [];
 
   const start = toMinutes(wakeTime);
   const end = toMinutes(sleepTime);
@@ -48,15 +49,31 @@ export function generateTimeBlocks(
 
   let current = start;
 
-  while (current <= end) {
-    blocks.push({
-  id: `block-${current}`,
-  timeLabel: formatMinutes(current),
-  completed: false,
-  categoryId: null,
-  description: "",
-});
+  while (current + intervalMinutes <= end) {
+    const startMinutes = current;
+    const endMinutes = current + intervalMinutes;
 
+    const startTime = `${Math.floor(startMinutes / 60)
+      .toString()
+      .padStart(2, "0")}:${(startMinutes % 60)
+      .toString()
+      .padStart(2, "0")}`;
+
+    const endTime = `${Math.floor(endMinutes / 60)
+      .toString()
+      .padStart(2, "0")}:${(endMinutes % 60)
+      .toString()
+      .padStart(2, "0")}`;
+
+    blocks.push({
+      id: `block-${startMinutes}`,
+      startTime,
+      endTime,
+      timeLabel: `${formatMinutes(startMinutes)}`,
+      completed: false,
+      categoryId: null,
+      description: "",
+    });
 
     current += intervalMinutes;
   }

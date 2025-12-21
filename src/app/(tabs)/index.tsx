@@ -9,7 +9,7 @@ import React from "react";
 import TimeBlockModal from "../../components/time-block/TimeBlockModal";
 import TimePickerModal from "../../components/config/TimePickerModal";
 import IntervalPicker from "../../components/config/IntervalPickerModal";
-import formatTime from "../../utils/time";
+import {formatTime, getBlockDate, isFutureBlock} from "../../utils/time";
 import { dateToHHMM } from "../../utils/dateToHHMM";
 import DailyGoalsModal from "../../components/config/DailyGoalsModal";
 import { Category } from "../../constants/categories";
@@ -18,134 +18,168 @@ import LogoutButton from "../../components/auth/LogoutButton";
 import { router } from "expo-router";
 import { useAuthStore } from "../../store/useAuthStore";
 import { fetchCategories, deleteCategory, addCategory } from "../../services/categories";
+import { Block } from "../../utils/timeBlocks";
 
 
 
-const MOCK_CONFIG = {
-  wakeTime: "09:00",
-  sleepTime: "22:00",
-  intervalMinutes: 45,
-};
+
 
 export default function Home() {
 
-  
+  /*HELPER FUNCTIONS */
 
-
-
-  const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [dailyGoals, setDailyGoals] = useState<string[]>([
-]);
-  const [timeBlocks, setTimeBlocks] = useState(() =>
-  generateTimeBlocks(
-    MOCK_CONFIG.wakeTime,
-    MOCK_CONFIG.sleepTime,
-    MOCK_CONFIG.intervalMinutes
-  )
-);
-
-const [categories, setCategories] = useState<Category[]>([]);
-
-const authUser = useAuthStore((s) => s.user);
-
-useEffect(() => {
-  if (!authUser) return;
-
-  getOrCreateToday(authUser.id);
-  loadCategories()
-
-}, [authUser]);
-
-
-
-async function loadCategories() {
-    if(!authUser) return;
-    const data = await fetchCategories(authUser.id);
-    setCategories(data);
+  function todayISO() {
+  return new Date().toISOString().slice(0, 10);
   }
 
-function handleAddCategory(category: Category) {
-  setCategories(prev => [...prev, category]);
-}
+  function parseDBTime(time: string) {
+    const [h, m] = time.split(":").map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    return d;
+  }
 
-async function handleDeleteCategory(categoryId: string) {
-  await deleteCategory(categoryId);
+  /*AUTHORITATIVE HYDRATION FUNCTION */
 
-  setCategories(prev =>
-    prev.filter(c => c.id !== categoryId)
+  const authUser = useAuthStore((s) => s.user);
+
+async function hydrateAllForToday(userId: string) {
+  console.log("🔥 hydrateAllForToday called", userId);
+
+  // --- helpers scoped here for clarity ---
+  function safeTime(value: string | null) {
+    return value && value.trim() !== "" ? value : null;
+  }
+
+  // --- ensure today exists ---
+  const day = await getOrCreateToday(userId);
+  if (!day) {
+    console.error("❌ Failed to get/create day");
+    return;
+  }
+
+  const settings = await getOrCreateUserSettings(userId);
+  if (!settings) {
+    console.error("❌ Failed to get/create user settings");
+    return;
+  }
+
+  // --- resolve effective values (DEFENSIVE) ---
+  const effectiveWake =
+    safeTime(day.wake_time) ??
+    safeTime(settings.wake_time) ??
+    "08:00";
+
+  const effectiveSleep =
+    safeTime(day.sleep_time) ??
+    safeTime(settings.sleep_time) ??
+    "22:00";
+
+  const effectiveInterval =
+    day.time_block_interval && day.time_block_interval > 0
+      ? day.time_block_interval
+      : settings.interval_minutes && settings.interval_minutes > 0
+      ? settings.interval_minutes
+      : 45;
+
+  console.log("⏰ resolved schedule", {
+    effectiveWake,
+    effectiveSleep,
+    effectiveInterval,
+  });
+
+  // --- convert to Date objects ---
+  const wakeDate = parseDBTime(effectiveWake);
+  const sleepDate = parseDBTime(effectiveSleep);
+
+  // --- sanity check: sleep must be after wake ---
+  if (wakeDate >= sleepDate) {
+    console.warn(
+      "⚠️ Invalid wake/sleep range — no blocks generated",
+      effectiveWake,
+      effectiveSleep
+    );
+    setTimeBlocks([]);
+    return;
+  }
+
+  // --- hydrate config state ---
+  setWakeTime(wakeDate);
+  setSleepTime(sleepDate);
+  setIntervalMinutes(effectiveInterval);
+  setDailyGoals(day.goals ?? []);
+
+  // --- generate blocks ---
+  const generated = generateTimeBlocks(
+    dateToHHMM(wakeDate),
+    dateToHHMM(sleepDate),
+    effectiveInterval
   );
+
+  console.log("🧱 generated blocks:", generated.length);
+
+  setTimeBlocks(generated);
 }
 
-async function getOrCreateToday(userId: string) {
-  const today = new Date().toISOString().slice(0, 10);
 
-  const { data, error } = await supabase
-    .from("days")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("date", today)
-    .single();
-
-   
-  if (data) return data;
-
-  const { data: newDay } = await supabase
-    .from("days")
-    .insert({
-      user_id: userId,
-      date: today,
-    })
-    .select()
-    .single();
-    
-
-
-  return newDay;
-}
-
-useEffect(() => {
+  useEffect(() => {
   if (!authUser) return;
 
-  async function hydrateToday() {
-    if (!authUser) return;
-    const day = await getOrCreateToday(authUser.id);
-
-    // 🔑 HYDRATE GOALS
-    setDailyGoals(day?.goals ?? []);
-  }
-
-  hydrateToday();
+  hydrateAllForToday(authUser.id);
+  loadCategories();
 }, [authUser]);
 
-async function getOrCreateUserSettings(userId: string) {
-  const { data } = await supabase
-    .from("user_settings")
-    .select("wake_time, sleep_time, interval_minutes")
-    .eq("user_id", userId)
-    .maybeSingle(); // 👈 IMPORTANT
+  /*CLEANED MUTATION HANDLERS */
 
-  if (data) return data;
+ async function handleSaveTimeBlock(data: {
+  categoryId: string | null;
+  description: string;
+}) {
+  if (!activeBlockId || !authUser) return;
 
-  // Create defaults if missing
-  const { data: newSettings, error } = await supabase
-    .from("user_settings")
-    .insert({
-      user_id: userId,
-      interval_minutes: 45, // safe default
-      wake_time: null,
-      sleep_time: null,
-    })
-    .select("wake_time, sleep_time, interval_minutes")
-    .single();
+  const today = todayISO();
+
+  const block = timeBlocks.find(b => b.id === activeBlockId);
+  if (!block) return;
+
+  // Optimistic UI update
+  setTimeBlocks(prev =>
+    prev.map(b =>
+      b.id === activeBlockId
+        ? {
+            ...b,
+            completed: true,
+            categoryId: data.categoryId,
+            description: data.description,
+          }
+        : b
+    )
+  );
+
+  const { error } = await supabase
+    .from("time_blocks")
+    .upsert(
+      {
+        user_id: authUser.id,
+        date: today,
+        start_time: block.startTime,
+        end_time: block.endTime,
+        completed: true,
+        category_id: data.categoryId,
+        description: data.description,
+      },
+      { onConflict: "user_id,date,start_time" }
+    );
 
   if (error) {
-    console.error("Failed to create user_settings", error);
-    return null;
+    console.error("Failed to save time block", error);
   }
 
-  return newSettings;
+  setIsModalOpen(false);
+  setActiveBlockId(null);
 }
+
+
 
 async function saveDailyGoals(goals: string[]) {
   if (!authUser) return;
@@ -171,218 +205,180 @@ async function saveDailyGoals(goals: string[]) {
   setActiveConfigModal(null);
 }
 
-
-async function loadTodayConfig(userId: string) {
-  const today = new Date().toISOString().slice(0, 10);
-
-  // 1️⃣ Ensure today exists
-  const day = await getOrCreateToday(userId);
-
-  // 2️⃣ Load user defaults
-  const settings = await getOrCreateUserSettings(userId);
-
-  if (!settings) {
-  console.error("Failed to load or create user settings");
-  return;
-}
-
-
-  // 3️⃣ Resolve effective values
-  const effectiveWake =
-    day?.wake_time ?? settings?.wake_time ?? "08:00";
-
-  const effectiveSleep =
-    day?.sleep_time ?? settings?.sleep_time ?? "22:00";
-
-  const effectiveInterval =
-    day?.time_block_interval ?? settings?.interval_minutes ?? 45;
-
-  // 4️⃣ Hydrate state
-  const wakeDate = parseDBTime(effectiveWake);
-  const sleepDate = parseDBTime(effectiveSleep);
-
-  setWakeTime(wakeDate);
-  setSleepTime(sleepDate);
-  setIntervalMinutes(effectiveInterval);
-
-  regenerateTimeBlocks(wakeDate, sleepDate, effectiveInterval);
-}
-
-function parseDBTime(time: string) {
-  const [h, m] = time.split(":").map(Number);
-  const d = new Date();
-  d.setHours(h);
-  d.setMinutes(m);
-  d.setSeconds(0);
-  return d;
-}
-
-useEffect(() => {
-  if (!authUser) return;
-  loadTodayConfig(authUser.id);
-}, [authUser]);
-
-
-function formatTimeForDB(date: Date) {
-  const h = date.getHours().toString().padStart(2, "0");
-  const m = date.getMinutes().toString().padStart(2, "0");
-  return `${h}:${m}`;
-}
-
 async function saveWakeTime(time: Date) {
   if (!authUser) return;
 
-  const today = new Date().toISOString().slice(0, 10);
-  const formatted = dateToHHMM(time);
-
-  // 🔑 ENSURE ROW EXISTS
-  await getOrCreateToday(authUser.id);
+  await supabase
+    .from("days")
+    .update({ wake_time: dateToHHMM(time) })
+    .eq("user_id", authUser.id)
+    .eq("date", todayISO());
 
   setWakeTime(time);
 
-  const { error } = await supabase
-    .from("days")
-    .update({ wake_time: formatted })
-    .eq("user_id", authUser.id)
-    .eq("date", today);
-
-  if (error) console.error(error);
-
-  regenerateTimeBlocks(time, sleepTime, intervalMinutes);
+  await hydrateAllForToday(authUser.id);
   setActiveConfigModal(null);
 }
+
 
 async function saveSleepTime(time: Date) {
   if (!authUser) return;
 
-  const today = new Date().toISOString().slice(0, 10);
   const formatted = dateToHHMM(time);
 
-  await getOrCreateToday(authUser.id);
-
+  // Optimistically update local state
   setSleepTime(time);
 
   const { error } = await supabase
     .from("days")
     .update({ sleep_time: formatted })
     .eq("user_id", authUser.id)
-    .eq("date", today);
+    .eq("date", todayISO());
 
-  if (error) console.error(error);
+  if (error) {
+    console.error("Failed to save sleep time", error);
+    return;
+  }
 
-  regenerateTimeBlocks(wakeTime, time, intervalMinutes);
+  // 🔑 Re-hydrate EVERYTHING (blocks, goals, config)
+  await hydrateAllForToday(authUser.id);
+
   setActiveConfigModal(null);
 }
 
 async function saveInterval(newInterval: number) {
   if (!authUser) return;
 
-  const today = new Date().toISOString().slice(0, 10);
-
-  await getOrCreateToday(authUser.id);
-
+  // Optimistically update local state
   setIntervalMinutes(newInterval);
 
   const { error } = await supabase
     .from("days")
     .update({ time_block_interval: newInterval })
     .eq("user_id", authUser.id)
-    .eq("date", today);
+    .eq("date", todayISO());
 
-  if (error) console.error(error);
+  if (error) {
+    console.error("Failed to save interval", error);
+    return;
+  }
 
-  regenerateTimeBlocks(wakeTime, sleepTime, newInterval);
+  // 🔑 Re-hydrate EVERYTHING (blocks, persisted progress preserved)
+  await hydrateAllForToday(authUser.id);
+
   setActiveConfigModal(null);
 }
 
 
 
-  const activeBlock = timeBlocks.find(b => b.id === activeBlockId);
+/* =====================
+   STATE
+===================== */
 
+// Time blocks
+const [timeBlocks, setTimeBlocks] = useState<Block[]>([]);
+const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
+const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const completedCount = timeBlocks.filter(b => b.completed).length;
+// Categories
+const [categories, setCategories] = useState<Category[]>([]);
 
-  const progress =
-  timeBlocks.length > 0
-    ? completedCount / timeBlocks.length
-    : 0;
-
-  function handleSaveTimeBlock(data: {
-  categoryId: string | null;
-  description: string;
-}) {
-  if (!activeBlockId) return;
-
-  setTimeBlocks(prev =>
-    prev.map(block =>
-      block.id === activeBlockId
-        ? {
-            ...block,
-            completed: true,
-            categoryId: data.categoryId,
-            description: data.description,
-          }
-        : block
-    )
-  );
-
-  setIsModalOpen(false);
-  setActiveBlockId(null);
-}
-
-type ConfigModal = "wake" | "sleep" | "interval" | "goals" | null;
-
-const [activeConfigModal, setActiveConfigModal] = useState<ConfigModal>(null);
-
-
-
+// Daily config
+const [dailyGoals, setDailyGoals] = useState<string[]>([]);
 const [wakeTime, setWakeTime] = useState(new Date(2024, 0, 1, 8, 0));
 const [sleepTime, setSleepTime] = useState(new Date(2024, 0, 1, 22, 0));
 const [intervalMinutes, setIntervalMinutes] = useState(45);
 
-function regenerateTimeBlocks(
-  wake: Date,
-  sleep: Date,
-  interval: number
-) {
-  setTimeBlocks(
-    generateTimeBlocks(
-      dateToHHMM(wake),
-      dateToHHMM(sleep),
-      interval
-    )
-  );
+// Config modal
+type ConfigModal = "wake" | "sleep" | "interval" | "goals" | null;
+const [activeConfigModal, setActiveConfigModal] = useState<ConfigModal>(null);
+
+
+/* =====================
+   DERIVED STATE
+===================== */
+
+const activeBlock = timeBlocks.find(b => b.id === activeBlockId);
+
+const completedCount = timeBlocks.filter(b => b.completed).length;
+
+const progress =
+  timeBlocks.length > 0
+    ? completedCount / timeBlocks.length
+    : 0;
+
+/* =====================
+   CATEGORY HELPERS
+===================== */
+
+async function loadCategories() {
+  if (!authUser) return;
+  const data = await fetchCategories(authUser.id);
+  setCategories(data);
 }
 
-function getBlockDate(timeLabel: string): Date {
-  const now = new Date();
-
-  // Extract hour/minute from "h:mmAM"
-  const match = timeLabel.match(/(\d+):(\d+)(AM|PM)/);
-  if (!match) return now;
-
-  let hour = parseInt(match[1], 10);
-  const minute = parseInt(match[2], 10);
-  const period = match[3];
-
-  if (period === "PM" && hour !== 12) hour += 12;
-  if (period === "AM" && hour === 12) hour = 0;
-
-  const blockDate = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    hour,
-    minute
-  );
-
-  return blockDate;
+function handleAddCategory(category: Category) {
+  setCategories(prev => [...prev, category]);
 }
 
-function isFutureBlock(timeLabel: string): boolean {
-  const blockDate = getBlockDate(timeLabel);
-  return blockDate.getTime() > Date.now();
+async function handleDeleteCategory(categoryId: string) {
+  await deleteCategory(categoryId);
+  setCategories(prev => prev.filter(c => c.id !== categoryId));
 }
+
+/* =====================
+   DB HELPERS
+===================== */
+
+async function getOrCreateUserSettings(userId: string) {
+  const { data } = await supabase
+    .from("user_settings")
+    .select("wake_time, sleep_time, interval_minutes")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (data) return data;
+
+  const { data: newSettings, error } = await supabase
+    .from("user_settings")
+    .insert({
+      user_id: userId,
+      interval_minutes: 45,
+      wake_time: null,
+      sleep_time: null,
+    })
+    .select("wake_time, sleep_time, interval_minutes")
+    .single();
+
+  if (error) {
+    console.error("Failed to create user_settings", error);
+    return null;
+  }
+
+  return newSettings;
+}
+
+async function getOrCreateToday(userId: string) {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const { data } = await supabase
+    .from("days")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("date", today)
+    .single();
+
+  if (data) return data;
+
+  const { data: newDay } = await supabase
+    .from("days")
+    .insert({ user_id: userId, date: today })
+    .select()
+    .single();
+
+  return newDay;
+}
+
 
 
   return (
