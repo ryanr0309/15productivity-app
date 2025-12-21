@@ -9,7 +9,7 @@ import React from "react";
 import TimeBlockModal from "../../components/time-block/TimeBlockModal";
 import TimePickerModal from "../../components/config/TimePickerModal";
 import IntervalPicker from "../../components/config/IntervalPickerModal";
-import {formatTime, getBlockDate, isFutureBlock} from "../../utils/time";
+import {formatTime, getBlockDate, isFutureBlock, roundUpToInterval} from "../../utils/time";
 import { dateToHHMM } from "../../utils/dateToHHMM";
 import DailyGoalsModal from "../../components/config/DailyGoalsModal";
 import { Category } from "../../constants/categories";
@@ -19,7 +19,8 @@ import { router } from "expo-router";
 import { useAuthStore } from "../../store/useAuthStore";
 import { fetchCategories, deleteCategory, addCategory } from "../../services/categories";
 import { Block } from "../../utils/timeBlocks";
-
+import { mergeTimeBlocks, loadPersistedTimeBlocks } from "../../utils/timeBlocks";
+import { mergeAfterScheduleChange } from "../../utils/timeBlocks";
 
 
 
@@ -39,6 +40,14 @@ export default function Home() {
     return d;
   }
 
+  function blockStartDate(startTime: string) {
+  const [h, m] = startTime.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d;
+}
+
+
   /*AUTHORITATIVE HYDRATION FUNCTION */
 
   const authUser = useAuthStore((s) => s.user);
@@ -46,12 +55,12 @@ export default function Home() {
 async function hydrateAllForToday(userId: string) {
   console.log("🔥 hydrateAllForToday called", userId);
 
-  // --- helpers scoped here for clarity ---
+  // ---------- helpers ----------
   function safeTime(value: string | null) {
     return value && value.trim() !== "" ? value : null;
   }
 
-  // --- ensure today exists ---
+  // ---------- ensure rows ----------
   const day = await getOrCreateToday(userId);
   if (!day) {
     console.error("❌ Failed to get/create day");
@@ -64,7 +73,7 @@ async function hydrateAllForToday(userId: string) {
     return;
   }
 
-  // --- resolve effective values (DEFENSIVE) ---
+  // ---------- resolve effective config ----------
   const effectiveWake =
     safeTime(day.wake_time) ??
     safeTime(settings.wake_time) ??
@@ -88,38 +97,43 @@ async function hydrateAllForToday(userId: string) {
     effectiveInterval,
   });
 
-  // --- convert to Date objects ---
+  // ---------- convert ----------
   const wakeDate = parseDBTime(effectiveWake);
   const sleepDate = parseDBTime(effectiveSleep);
 
-  // --- sanity check: sleep must be after wake ---
   if (wakeDate >= sleepDate) {
-    console.warn(
-      "⚠️ Invalid wake/sleep range — no blocks generated",
-      effectiveWake,
-      effectiveSleep
-    );
+    console.warn("⚠️ Invalid wake/sleep range");
     setTimeBlocks([]);
     return;
   }
 
-  // --- hydrate config state ---
+  // ---------- hydrate config state FIRST ----------
   setWakeTime(wakeDate);
   setSleepTime(sleepDate);
   setIntervalMinutes(effectiveInterval);
   setDailyGoals(day.goals ?? []);
 
-  // --- generate blocks ---
-  const generated = generateTimeBlocks(
+  // ---------- load persisted blocks FIRST ----------
+  const persistedBlocks = await loadPersistedTimeBlocks(userId);
+
+  // ---------- generate schedule ----------
+  const generatedBlocks = generateTimeBlocks(
     dateToHHMM(wakeDate),
     dateToHHMM(sleepDate),
     effectiveInterval
   );
 
-  console.log("🧱 generated blocks:", generated.length);
+  // ---------- merge (hydration-safe) ----------
+  const mergedBlocks = mergeTimeBlocks(
+    generatedBlocks,
+    persistedBlocks
+  );
 
-  setTimeBlocks(generated);
+  console.log("🧱 blocks after hydration", mergedBlocks.length);
+
+  setTimeBlocks(mergedBlocks);
 }
+
 
 
   useEffect(() => {
@@ -208,40 +222,58 @@ async function saveDailyGoals(goals: string[]) {
 async function saveWakeTime(time: Date) {
   if (!authUser) return;
 
+  // 1️⃣ Persist override for today
   await supabase
     .from("days")
     .update({ wake_time: dateToHHMM(time) })
     .eq("user_id", authUser.id)
     .eq("date", todayISO());
 
+  // 2️⃣ Update local config
   setWakeTime(time);
 
-  await hydrateAllForToday(authUser.id);
+  // 3️⃣ Regenerate schedule
+  const generated = generateTimeBlocks(
+    dateToHHMM(time),
+    dateToHHMM(sleepTime),
+    intervalMinutes
+  );
+
+  // 4️⃣ Load persisted work
+  const persisted = await loadPersistedTimeBlocks(authUser.id);
+
+  // 5️⃣ Merge correctly
+  const merged = mergeAfterScheduleChange(generated, persisted);
+
+  setTimeBlocks(merged);
   setActiveConfigModal(null);
 }
+
 
 
 async function saveSleepTime(time: Date) {
   if (!authUser) return;
 
-  const formatted = dateToHHMM(time);
-
-  // Optimistically update local state
-  setSleepTime(time);
-
-  const { error } = await supabase
+  await supabase
     .from("days")
-    .update({ sleep_time: formatted })
+    .update({ sleep_time: dateToHHMM(time) })
     .eq("user_id", authUser.id)
     .eq("date", todayISO());
 
-  if (error) {
-    console.error("Failed to save sleep time", error);
-    return;
-  }
+  setSleepTime(time);
 
-  // 🔑 Re-hydrate EVERYTHING (blocks, goals, config)
-  await hydrateAllForToday(authUser.id);
+  // 🔑 REBUILD DAY WITH FREEZE-PAST LOGIC
+  const generated = generateTimeBlocks(
+    dateToHHMM(wakeTime),
+    dateToHHMM(time),
+    intervalMinutes
+  );
+
+  const persisted = await loadPersistedTimeBlocks(authUser.id);
+
+  const merged = mergeAfterScheduleChange(generated, persisted);
+
+  setTimeBlocks(merged);
 
   setActiveConfigModal(null);
 }
@@ -249,25 +281,75 @@ async function saveSleepTime(time: Date) {
 async function saveInterval(newInterval: number) {
   if (!authUser) return;
 
-  // Optimistically update local state
-  setIntervalMinutes(newInterval);
-
-  const { error } = await supabase
+  await supabase
     .from("days")
     .update({ time_block_interval: newInterval })
     .eq("user_id", authUser.id)
     .eq("date", todayISO());
 
-  if (error) {
-    console.error("Failed to save interval", error);
-    return;
-  }
+  setIntervalMinutes(newInterval);
 
-  // 🔑 Re-hydrate EVERYTHING (blocks, persisted progress preserved)
-  await hydrateAllForToday(authUser.id);
+  const persisted = await loadPersistedTimeBlocks(authUser.id);
 
+  const persistedMap = new Map(
+    persisted.map(p => [p.start_time, p])
+  );
+
+  const now = new Date();
+
+  // 1️⃣ Generate OLD schedule
+  const fullGenerated = generateTimeBlocks(
+    dateToHHMM(wakeTime),
+    dateToHHMM(sleepTime),
+    intervalMinutes
+  );
+
+  // 2️⃣ Split past vs future
+  const generatedPast = fullGenerated.filter(b =>
+    blockStartDate(b.startTime) < now
+  );
+
+  const hydratedPast = generatedPast.map(b => {
+    const p = persistedMap.get(b.startTime);
+    return p
+      ? {
+          ...b,
+          completed: p.completed,
+          categoryId: p.category_id,
+          description: p.description ?? "",
+        }
+      : b;
+  });
+
+  // 3️⃣ Regenerate future with NEW interval
+  const futureStart = roundUpToInterval(now, newInterval);
+
+  const regeneratedFuture = generateTimeBlocks(
+    dateToHHMM(futureStart),
+    dateToHHMM(sleepTime),
+    newInterval
+  );
+
+  const hydratedFuture = regeneratedFuture.map(b => {
+    const p = persistedMap.get(b.startTime);
+    return p
+      ? {
+          ...b,
+          completed: p.completed,
+          categoryId: p.category_id,
+          description: p.description ?? "",
+        }
+      : b;
+  });
+
+  // ✅ FINAL RESULT
+  setTimeBlocks([...hydratedPast, ...hydratedFuture]);
   setActiveConfigModal(null);
 }
+
+
+
+
 
 
 

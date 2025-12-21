@@ -36,3 +36,12 @@ export function isFutureBlock(timeLabel: string): boolean {
   const blockDate = getBlockDate(timeLabel);
   return blockDate.getTime() > Date.now();
 }
+
+export function roundUpToInterval(date: Date, interval: number) {
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  const rounded = Math.ceil(minutes / interval) * interval;
+
+  const d = new Date(date);
+  d.setHours(Math.floor(rounded / 60), rounded % 60, 0, 0);
+  return d;
+}

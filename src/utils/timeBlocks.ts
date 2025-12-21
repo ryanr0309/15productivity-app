@@ -1,5 +1,8 @@
 // utils/timeBlocks.ts
 
+import { supabase } from "../lib/supabase";
+import { getBlockDate } from "./time";
+
 export type Block = {
   id: string;
   startTime: string;     // "HH:MM"
@@ -10,6 +13,9 @@ export type Block = {
   description: string;
 };
 
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+  }
 
 /**
  * Converts "HH:mm" to minutes since midnight
@@ -79,4 +85,87 @@ export function generateTimeBlocks(
   }
 
   return blocks;
+}
+
+export async function loadPersistedTimeBlocks(userId: string) {
+  const { data, error } = await supabase
+    .from("time_blocks")
+    .select("start_time, completed, category_id, description")
+    .eq("user_id", userId)
+    .eq("date", todayISO());
+
+  if (error) {
+    console.error("Failed to load persisted time blocks", error);
+    return [];
+  }
+
+  return (data ?? []).map(b => ({
+    ...b,
+    start_time: b.start_time.slice(0, 5), // 🔑 "11:00:00" → "11:00"
+  }));
+}
+
+
+export function mergeTimeBlocks(
+  generated: Block[],
+  persisted: {
+    start_time: string;
+    completed: boolean;
+    category_id: string | null;
+    description: string;
+  }[]
+): Block[] {
+  const persistedMap = new Map(
+    persisted.map(p => [p.start_time, p])
+  );
+
+  return generated.map(block => {
+    const persistedBlock = persistedMap.get(block.startTime);
+
+    // Persisted always wins
+    if (persistedBlock) {
+      return {
+        ...block,
+        completed: persistedBlock.completed,
+        categoryId: persistedBlock.category_id,
+        description: persistedBlock.description,
+      };
+    }
+
+    // Otherwise, keep generated block (even if past)
+    return block;
+  });
+}
+
+export function mergeAfterScheduleChange(
+  generated: Block[],
+  persisted: {
+    start_time: string;
+    completed: boolean;
+    category_id: string | null;
+    description: string;
+  }[]
+): Block[] {
+  function normalizeHHMM(time: string) {
+    return time.slice(0, 5);
+  }
+
+  const persistedMap = new Map(
+    persisted.map(p => [normalizeHHMM(p.start_time), p])
+  );
+
+  return generated.map(block => {
+    const persistedBlock = persistedMap.get(block.startTime);
+
+    if (persistedBlock) {
+      return {
+        ...block,
+        completed: persistedBlock.completed,
+        categoryId: persistedBlock.category_id,
+        description: persistedBlock.description,
+      };
+    }
+
+    return block;
+  });
 }
