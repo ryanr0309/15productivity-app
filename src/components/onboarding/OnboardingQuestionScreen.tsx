@@ -1,6 +1,5 @@
 import { View, Text, Pressable, StyleSheet } from "react-native";
-import { useState } from "react";
-import React from "react";
+import React, { ReactNode } from "react";
 
 type Option = {
   id: string;
@@ -11,8 +10,11 @@ type Props = {
   question: string;
   subtitle?: string;
   options: Option[];
-  onContinue: (selectedOptionId: string) => void;
+  onContinue: () => void;
   onBack?: () => void;
+  onSelect?: (optionId: string) => void;
+  selectedId?: string | null;
+  children?: ReactNode;
 };
 
 export default function OnboardingQuestionScreen({
@@ -21,8 +23,12 @@ export default function OnboardingQuestionScreen({
   options,
   onContinue,
   onBack,
+  onSelect,
+  selectedId,
+  children,
 }: Props) {
-  const [selected, setSelected] = useState<string | null>(null);
+  const canContinue =
+    options.length === 0 || Boolean(selectedId);
 
   return (
     <View style={styles.container}>
@@ -40,33 +46,38 @@ export default function OnboardingQuestionScreen({
       <Text style={styles.question}>{question}</Text>
       {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
 
-      {/* Options */}
-      <View style={styles.options}>
-        {options.map(option => {
-          const isSelected = selected === option.id;
+      {/* Custom content */}
+      {children}
 
-          return (
-            <Pressable
-              key={option.id}
-              onPress={() => setSelected(option.id)}
-              style={[
-                styles.option,
-                isSelected && styles.optionSelected,
-              ]}
-            >
-              <Text style={styles.optionText}>{option.label}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      {/* Options */}
+      {options.length > 0 && (
+        <View style={styles.options}>
+          {options.map(option => {
+            const isSelected = selectedId === option.id;
+
+            return (
+              <Pressable
+                key={option.id}
+                onPress={() => onSelect?.(option.id)}
+                style={[
+                  styles.option,
+                  isSelected && styles.optionSelected,
+                ]}
+              >
+                <Text style={styles.optionText}>{option.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
 
       {/* Continue */}
       <Pressable
-        disabled={!selected}
-        onPress={() => selected && onContinue(selected)}
+        disabled={!canContinue}
+        onPress={onContinue}
         style={[
           styles.continue,
-          !selected && styles.continueDisabled,
+          !canContinue && styles.continueDisabled,
         ]}
       >
         <Text style={styles.continueText}>Continue</Text>

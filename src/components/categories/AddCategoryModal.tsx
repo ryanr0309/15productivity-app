@@ -10,19 +10,23 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import ColorPicker from "../../components/ColorPicker";
 import { Category } from "../../constants/categories";
+import { addCategory } from "../../services/categories";
+import { useAuthStore } from "../../store/useAuthStore";
+
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   categories: Category[];
-  onAddCategory: (category: Category) => void;
+  onCreate: (category: Category) => void;
 };
+
 
 export default function AddCategoryModal({
   visible,
   onClose,
   categories,
-  onAddCategory,
+  onCreate,
 }: Props) {
   const [name, setName] = useState("");
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
@@ -39,18 +43,21 @@ export default function AddCategoryModal({
 
   const canSave = name.trim().length > 0 && selectedColor !== null;
 
-  const handleSave = () => {
-    if (!canSave) return;
+ const authUser = useAuthStore((s) => s.user);
 
-    const newCategory: Category = {
-      id: Date.now().toString(),
-      label: name.trim(),
-      color: selectedColor!,
-    };
+const handleSave = async () => {
+  if (!canSave || !authUser) return;
 
-    onAddCategory(newCategory);
-    onClose();
-  };
+  const newCategory = await addCategory(
+    name.trim(),
+    selectedColor!,
+    authUser.id
+  );
+
+  onCreate(newCategory);
+  onClose();
+};
+
 
   return (
     <Modal

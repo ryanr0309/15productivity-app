@@ -17,9 +17,9 @@ import { supabase } from "../../lib/supabase";
 import LogoutButton from "../../components/auth/LogoutButton";
 import { router } from "expo-router";
 import { useAuthStore } from "../../store/useAuthStore";
+import { fetchCategories, deleteCategory, addCategory } from "../../services/categories";
 
 
-supabase.auth.signOut();
 
 const MOCK_CONFIG = {
   wakeTime: "09:00",
@@ -28,6 +28,9 @@ const MOCK_CONFIG = {
 };
 
 export default function Home() {
+
+  
+
 
 
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
@@ -42,12 +45,257 @@ export default function Home() {
   )
 );
 
-const [categories, setCategories] = useState<Category[]>([
-  { id: "school", label: "School", color: "#4DA3FF" },
-  { id: "gym", label: "Gym", color: "#18C964" },
-  { id: "work", label: "Work", color: "#FF9F43" },
-  { id: "focus", label: "Deep Focus", color: "#A55EEA" },
-]);
+const [categories, setCategories] = useState<Category[]>([]);
+
+const authUser = useAuthStore((s) => s.user);
+
+useEffect(() => {
+  if (!authUser) return;
+
+  getOrCreateToday(authUser.id);
+  loadCategories()
+
+}, [authUser]);
+
+
+
+async function loadCategories() {
+    if(!authUser) return;
+    const data = await fetchCategories(authUser.id);
+    setCategories(data);
+  }
+
+function handleAddCategory(category: Category) {
+  setCategories(prev => [...prev, category]);
+}
+
+async function handleDeleteCategory(categoryId: string) {
+  await deleteCategory(categoryId);
+
+  setCategories(prev =>
+    prev.filter(c => c.id !== categoryId)
+  );
+}
+
+async function getOrCreateToday(userId: string) {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const { data, error } = await supabase
+    .from("days")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("date", today)
+    .single();
+
+   
+  if (data) return data;
+
+  const { data: newDay } = await supabase
+    .from("days")
+    .insert({
+      user_id: userId,
+      date: today,
+    })
+    .select()
+    .single();
+    
+
+
+  return newDay;
+}
+
+useEffect(() => {
+  if (!authUser) return;
+
+  async function hydrateToday() {
+    if (!authUser) return;
+    const day = await getOrCreateToday(authUser.id);
+
+    // 🔑 HYDRATE GOALS
+    setDailyGoals(day?.goals ?? []);
+  }
+
+  hydrateToday();
+}, [authUser]);
+
+async function getOrCreateUserSettings(userId: string) {
+  const { data } = await supabase
+    .from("user_settings")
+    .select("wake_time, sleep_time, interval_minutes")
+    .eq("user_id", userId)
+    .maybeSingle(); // 👈 IMPORTANT
+
+  if (data) return data;
+
+  // Create defaults if missing
+  const { data: newSettings, error } = await supabase
+    .from("user_settings")
+    .insert({
+      user_id: userId,
+      interval_minutes: 45, // safe default
+      wake_time: null,
+      sleep_time: null,
+    })
+    .select("wake_time, sleep_time, interval_minutes")
+    .single();
+
+  if (error) {
+    console.error("Failed to create user_settings", error);
+    return null;
+  }
+
+  return newSettings;
+}
+
+async function saveDailyGoals(goals: string[]) {
+  if (!authUser) return;
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  // 🔑 Ensure row exists
+  await getOrCreateToday(authUser.id);
+
+  setDailyGoals(goals);
+
+  const { error } = await supabase
+    .from("days")
+    .update({ goals })
+    .eq("user_id", authUser.id)
+    .eq("date", today);
+
+  if (error) {
+    console.error("Failed to save daily goals", error);
+    return;
+  }
+
+  setActiveConfigModal(null);
+}
+
+
+async function loadTodayConfig(userId: string) {
+  const today = new Date().toISOString().slice(0, 10);
+
+  // 1️⃣ Ensure today exists
+  const day = await getOrCreateToday(userId);
+
+  // 2️⃣ Load user defaults
+  const settings = await getOrCreateUserSettings(userId);
+
+  if (!settings) {
+  console.error("Failed to load or create user settings");
+  return;
+}
+
+
+  // 3️⃣ Resolve effective values
+  const effectiveWake =
+    day?.wake_time ?? settings?.wake_time ?? "08:00";
+
+  const effectiveSleep =
+    day?.sleep_time ?? settings?.sleep_time ?? "22:00";
+
+  const effectiveInterval =
+    day?.time_block_interval ?? settings?.interval_minutes ?? 45;
+
+  // 4️⃣ Hydrate state
+  const wakeDate = parseDBTime(effectiveWake);
+  const sleepDate = parseDBTime(effectiveSleep);
+
+  setWakeTime(wakeDate);
+  setSleepTime(sleepDate);
+  setIntervalMinutes(effectiveInterval);
+
+  regenerateTimeBlocks(wakeDate, sleepDate, effectiveInterval);
+}
+
+function parseDBTime(time: string) {
+  const [h, m] = time.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h);
+  d.setMinutes(m);
+  d.setSeconds(0);
+  return d;
+}
+
+useEffect(() => {
+  if (!authUser) return;
+  loadTodayConfig(authUser.id);
+}, [authUser]);
+
+
+function formatTimeForDB(date: Date) {
+  const h = date.getHours().toString().padStart(2, "0");
+  const m = date.getMinutes().toString().padStart(2, "0");
+  return `${h}:${m}`;
+}
+
+async function saveWakeTime(time: Date) {
+  if (!authUser) return;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const formatted = dateToHHMM(time);
+
+  // 🔑 ENSURE ROW EXISTS
+  await getOrCreateToday(authUser.id);
+
+  setWakeTime(time);
+
+  const { error } = await supabase
+    .from("days")
+    .update({ wake_time: formatted })
+    .eq("user_id", authUser.id)
+    .eq("date", today);
+
+  if (error) console.error(error);
+
+  regenerateTimeBlocks(time, sleepTime, intervalMinutes);
+  setActiveConfigModal(null);
+}
+
+async function saveSleepTime(time: Date) {
+  if (!authUser) return;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const formatted = dateToHHMM(time);
+
+  await getOrCreateToday(authUser.id);
+
+  setSleepTime(time);
+
+  const { error } = await supabase
+    .from("days")
+    .update({ sleep_time: formatted })
+    .eq("user_id", authUser.id)
+    .eq("date", today);
+
+  if (error) console.error(error);
+
+  regenerateTimeBlocks(wakeTime, time, intervalMinutes);
+  setActiveConfigModal(null);
+}
+
+async function saveInterval(newInterval: number) {
+  if (!authUser) return;
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  await getOrCreateToday(authUser.id);
+
+  setIntervalMinutes(newInterval);
+
+  const { error } = await supabase
+    .from("days")
+    .update({ time_block_interval: newInterval })
+    .eq("user_id", authUser.id)
+    .eq("date", today);
+
+  if (error) console.error(error);
+
+  regenerateTimeBlocks(wakeTime, sleepTime, newInterval);
+  setActiveConfigModal(null);
+}
+
+
 
   const activeBlock = timeBlocks.find(b => b.id === activeBlockId);
 
@@ -254,12 +502,13 @@ function isFutureBlock(timeLabel: string): boolean {
   initialDescription={activeBlock?.description ?? ""}
 
   categories={categories}
-  onAddCategory={(newCategory) => {
-    setCategories(prev => [...prev, newCategory]);
-  }}
+
+  onAddCategory={handleAddCategory}
+  onDeleteCategory={handleDeleteCategory}
 
   onSave={handleSaveTimeBlock}
 />
+
 
 
   </View>
@@ -272,14 +521,11 @@ function isFutureBlock(timeLabel: string): boolean {
   style={styles.modalContainer}
 >
   <TimePickerModal
-    title="Wake Time ☀️"
-    initialTime={wakeTime}
-    onSave={(time) => {
-      setWakeTime(time);
-      regenerateTimeBlocks(time, sleepTime, intervalMinutes)
-      setActiveConfigModal(null);
-    }}
-  />
+  title="Wake Time ☀️"
+  initialTime={wakeTime}
+  onSave={saveWakeTime}
+/>
+
 </Modal>
 
 
@@ -289,15 +535,12 @@ function isFutureBlock(timeLabel: string): boolean {
   swipeDirection="down"
   style={styles.modalContainer}
 >
-  <TimePickerModal
-    title="Sleep Time 🌙"
-    initialTime={sleepTime}
-    onSave={(time) => {
-      setSleepTime(time);
-      regenerateTimeBlocks(wakeTime, time, intervalMinutes)
-      setActiveConfigModal(null);
-    }}
-  />
+<TimePickerModal
+  title="Sleep Time 🌙"
+  initialTime={sleepTime}
+  onSave={saveSleepTime}
+/>
+
 </Modal>
 
 <Modal
@@ -307,13 +550,10 @@ function isFutureBlock(timeLabel: string): boolean {
   style={styles.modalContainer}
 >
   <IntervalPicker
-    initialInterval={intervalMinutes}
-    onSave={(newInterval) => {
-      setIntervalMinutes(newInterval);
-      regenerateTimeBlocks(wakeTime, sleepTime, newInterval)
-      setActiveConfigModal(null);
-    }}
-  />
+  initialInterval={intervalMinutes}
+  onSave={saveInterval}
+/>
+
 </Modal>
 
 <Modal
@@ -325,10 +565,7 @@ function isFutureBlock(timeLabel: string): boolean {
 >
   <DailyGoalsModal
     initialGoals={dailyGoals}
-    onSave={(goals) => {
-      setDailyGoals(goals);
-      setActiveConfigModal(null);
-    }}
+    onSave={saveDailyGoals}
   />
 </Modal>
 

@@ -8,16 +8,18 @@ export default function RootLayout() {
   const setUser = useAuthStore((s) => s.setUser);
 
   useEffect(() => {
-    async function hydrateAuth() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        console.log("AUTH CHANGE:", session?.user);
+        setUser(session?.user ?? null);
+      }
+    );
 
-      setUser(user);
-    }
-
-    hydrateAuth();
+    return () => {
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
   return <Stack />;
 }
+

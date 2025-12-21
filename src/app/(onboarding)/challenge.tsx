@@ -1,8 +1,20 @@
-import React from "react";
+import { useState } from "react";
 import OnboardingQuestionScreen from "../../components/onboarding/OnboardingQuestionScreen";
 import { router } from "expo-router";
+import React from "react";
 
 export default function ChallengeScreen() {
+  const [challenge, setChallenge] = useState<string | null>(null);
+
+  function handleContinue() {
+    if (!challenge) return;
+
+    console.log("Challenge:", challenge);
+
+    // TODO: save to Supabase later
+    router.push("/(onboarding)/impact");
+  }
+
   return (
     <OnboardingQuestionScreen
       question="What do you struggle with the most?"
@@ -13,8 +25,11 @@ export default function ChallengeScreen() {
         { id: "energy", label: "Low energy or motivation" },
         { id: "planning", label: "Poor planning or structure" },
       ]}
+      selectedId={challenge}
+      onSelect={(id) => setChallenge(id)}
       onBack={() => router.back()}
-      onContinue={() => router.push("/(onboarding)/impact")}
+      onContinue={handleContinue}
     />
   );
 }
+

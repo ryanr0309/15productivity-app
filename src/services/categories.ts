@@ -38,3 +38,15 @@ export async function fetchCategories(userId: string) {
   if (error) throw error;
   return data;
 }
+
+export async function deleteCategory(categoryId: string): Promise<void> {
+  const { error } = await supabase
+    .from("categories")
+    .delete()
+    .eq("id", categoryId);
+
+  if (error) {
+    console.error("Failed to delete category:", error);
+    throw new Error("Failed to delete category");
+  }
+}

@@ -20,15 +20,15 @@ type Props = {
   initialDescription: string;
 
   categories: Category[];
+
   onAddCategory: (category: Category) => void;
+  onDeleteCategory: (categoryId: string) => void;
 
   onSave: (data: {
     categoryId: string | null;
     description: string;
   }) => void;
 };
-
-
 
 
 export default function TimeBlockModal({
@@ -38,6 +38,7 @@ export default function TimeBlockModal({
   initialDescription,
   categories,
   onAddCategory,
+  onDeleteCategory,
   onSave,
 }: Props) {
 
@@ -74,8 +75,9 @@ export default function TimeBlockModal({
   category={category}
   selected={category.id === selectedCategoryId}
   onPress={() => setSelectedCategoryId(category.id)}
-  onDelete={() => {}}
+  onDelete={() => onDeleteCategory(category.id)}
 />
+
   ))}
   <Pressable
       onPress={() => setIsAddCategoryOpen(true)}
@@ -109,8 +111,13 @@ export default function TimeBlockModal({
   visible={isAddCategoryOpen}
   onClose={() => setIsAddCategoryOpen(false)}
   categories={categories}
-  onAddCategory={onAddCategory}
+  onCreate={(category) => {
+    onAddCategory(category);
+    setIsAddCategoryOpen(false);
+  }}
 />
+
+
 
 
     </View>

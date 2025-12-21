@@ -1,8 +1,20 @@
-import React from "react";
-import OnboardingQuestionScreen from "../../components/onboarding/OnboardingQuestionScreen";
+import { useState } from "react";
 import { router } from "expo-router";
+import OnboardingQuestionScreen from "../../components/onboarding/OnboardingQuestionScreen";
+import React from "react";
 
 export default function GoalScreen() {
+  const [goal, setGoal] = useState<string | null>(null);
+
+  function handleContinue() {
+    if (!goal) return;
+
+    console.log("Goal:", goal);
+
+    // TODO: save to Supabase later
+    router.push("/(onboarding)/challenge");
+  }
+
   return (
     <OnboardingQuestionScreen
       question="What is your #1 goal right now?"
@@ -14,10 +26,9 @@ export default function GoalScreen() {
         { id: "stress", label: "Reducing stress and feeling more in control 🧘" },
         { id: "progress", label: "Making consistent progress toward my goals 📈" },
       ]}
-      onContinue={(value) => {
-        console.log("Goal:", value);
-        router.push("/(onboarding)/challenge");
-      }}
+      selectedId={goal}
+      onSelect={(id) => setGoal(id)}
+      onContinue={handleContinue}
     />
   );
 }

@@ -5,7 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { CATEGORY_COLORS } from "../../constants/categoryColors";
 import { Category } from "../../constants/categories";
-import { addCategory, fetchCategories } from "../../services/categories";
+import { addCategory, fetchCategories, deleteCategory } from "../../services/categories";
 import { useAuthStore } from "../../store/useAuthStore";
 import { supabase } from "../../lib/supabase";
 
@@ -23,6 +23,7 @@ const DEFAULT_CATEGORIES = [
 export default function OnboardingCategoriesScreen() {
   /* ---------- AUTH ---------- */
   const authUser = useAuthStore((s) => s.user);
+   console.log("USER ID:", authUser);
 
   if (!authUser) {
     return (
@@ -33,6 +34,7 @@ export default function OnboardingCategoriesScreen() {
   }
 
   const userId = authUser.id;
+
 
   /* ---------- STATE ---------- */
   const [categories, setCategories] = useState<Category[]>([]);
@@ -78,6 +80,21 @@ export default function OnboardingCategoriesScreen() {
     initCategories();
   }, [userId, initialized]);
 
+  async function handleDeleteCategory(categoryId: string) {
+  try {
+    // 1️⃣ Delete from Supabase
+    await deleteCategory(categoryId);
+
+    // 2️⃣ Update local state (instant UI update)
+    setCategories((prev) =>
+      prev.filter((c) => c.id !== categoryId)
+    );
+  } catch (error) {
+    console.error("Failed to delete category", error);
+    }
+  }
+
+
   /* ------------------ RENDER ------------------ */
 
   return (
@@ -104,9 +121,12 @@ export default function OnboardingCategoriesScreen() {
             style={[styles.pill, { backgroundColor: category.color }]}
           >
             <Text style={styles.pillText}>{category.label}</Text>
-            <Pressable>
+            <Pressable
+            onPress={() => handleDeleteCategory(category.id)}
+            >
               <Ionicons name="close" size={14} color="#FFFFFF" />
             </Pressable>
+
           </View>
         ))}
       </View>
