@@ -47,6 +47,16 @@ export default function Home() {
   return d;
 }
 
+function inferIntervalFromBlocks(blocks: Block[]): number {
+  if (blocks.length < 2) return intervalMinutes;
+
+  const a = blockStartDate(blocks[0].startTime);
+  const b = blockStartDate(blocks[1].startTime);
+
+  return (b.getTime() - a.getTime()) / 60000;
+}
+
+
 
   /*AUTHORITATIVE HYDRATION FUNCTION */
 
@@ -222,32 +232,51 @@ async function saveDailyGoals(goals: string[]) {
 async function saveWakeTime(time: Date) {
   if (!authUser) return;
 
-  // 1️⃣ Persist override for today
+  const newWake = dateToHHMM(time);
+
+  // 1️⃣ Persist override
   await supabase
     .from("days")
-    .update({ wake_time: dateToHHMM(time) })
+    .update({ wake_time: newWake })
     .eq("user_id", authUser.id)
     .eq("date", todayISO());
 
-  // 2️⃣ Update local config
   setWakeTime(time);
 
-  // 3️⃣ Regenerate schedule
-  const generated = generateTimeBlocks(
-    dateToHHMM(time),
-    dateToHHMM(sleepTime),
-    intervalMinutes
+  // 2️⃣ Keep existing blocks >= new wake
+  const keptBlocks = timeBlocks.filter(
+    b => b.startTime >= newWake
   );
 
-  // 4️⃣ Load persisted work
-  const persisted = await loadPersistedTimeBlocks(authUser.id);
+  // If no blocks exist yet, generate full day with DEFAULT interval
+  if (keptBlocks.length === 0) {
+    const regenerated = generateTimeBlocks(
+      newWake,
+      dateToHHMM(sleepTime),
+      intervalMinutes
+    );
+    setTimeBlocks(regenerated);
+    setActiveConfigModal(null);
+    return;
+  }
 
-  // 5️⃣ Merge correctly
-  const merged = mergeAfterScheduleChange(generated, persisted);
+  // 3️⃣ Infer interval from existing structure
+  const inferredInterval = inferIntervalFromBlocks(keptBlocks);
 
-  setTimeBlocks(merged);
+  // 4️⃣ Prepend missing blocks using INFERRED interval
+  const firstExisting = keptBlocks[0].startTime;
+
+  const prepend = generateTimeBlocks(
+    newWake,
+    firstExisting,
+    inferredInterval
+  ).filter(b => b.startTime < firstExisting);
+
+  setTimeBlocks([...prepend, ...keptBlocks]);
   setActiveConfigModal(null);
 }
+
+
 
 
 
@@ -262,72 +291,26 @@ async function saveSleepTime(time: Date) {
 
   setSleepTime(time);
 
-  // 🔑 REBUILD DAY WITH FREEZE-PAST LOGIC
-  const generated = generateTimeBlocks(
-    dateToHHMM(wakeTime),
+  const now = new Date();
+
+  // 1️⃣ Freeze past blocks
+  const frozenPast = timeBlocks.filter(b =>
+    blockStartDate(b.startTime) < now
+  );
+
+  // 2️⃣ Regenerate future blocks up to NEW sleep time
+  const futureStart = roundUpToInterval(now, intervalMinutes);
+
+  const regeneratedFuture = generateTimeBlocks(
+    dateToHHMM(futureStart),
     dateToHHMM(time),
     intervalMinutes
   );
 
+  // 3️⃣ Merge persisted work
   const persisted = await loadPersistedTimeBlocks(authUser.id);
-
-  const merged = mergeAfterScheduleChange(generated, persisted);
-
-  setTimeBlocks(merged);
-
-  setActiveConfigModal(null);
-}
-
-async function saveInterval(newInterval: number) {
-  if (!authUser) return;
-
-  await supabase
-    .from("days")
-    .update({ time_block_interval: newInterval })
-    .eq("user_id", authUser.id)
-    .eq("date", todayISO());
-
-  setIntervalMinutes(newInterval);
-
-  const persisted = await loadPersistedTimeBlocks(authUser.id);
-
   const persistedMap = new Map(
     persisted.map(p => [p.start_time, p])
-  );
-
-  const now = new Date();
-
-  // 1️⃣ Generate OLD schedule
-  const fullGenerated = generateTimeBlocks(
-    dateToHHMM(wakeTime),
-    dateToHHMM(sleepTime),
-    intervalMinutes
-  );
-
-  // 2️⃣ Split past vs future
-  const generatedPast = fullGenerated.filter(b =>
-    blockStartDate(b.startTime) < now
-  );
-
-  const hydratedPast = generatedPast.map(b => {
-    const p = persistedMap.get(b.startTime);
-    return p
-      ? {
-          ...b,
-          completed: p.completed,
-          categoryId: p.category_id,
-          description: p.description ?? "",
-        }
-      : b;
-  });
-
-  // 3️⃣ Regenerate future with NEW interval
-  const futureStart = roundUpToInterval(now, newInterval);
-
-  const regeneratedFuture = generateTimeBlocks(
-    dateToHHMM(futureStart),
-    dateToHHMM(sleepTime),
-    newInterval
   );
 
   const hydratedFuture = regeneratedFuture.map(b => {
@@ -342,8 +325,57 @@ async function saveInterval(newInterval: number) {
       : b;
   });
 
-  // ✅ FINAL RESULT
-  setTimeBlocks([...hydratedPast, ...hydratedFuture]);
+  setTimeBlocks([...frozenPast, ...hydratedFuture]);
+  setActiveConfigModal(null);
+}
+
+
+async function saveInterval(newInterval: number) {
+  if (!authUser) return;
+
+  await supabase
+    .from("days")
+    .update({ time_block_interval: newInterval })
+    .eq("user_id", authUser.id)
+    .eq("date", todayISO());
+
+  setIntervalMinutes(newInterval);
+
+  const now = new Date();
+
+  // 1️⃣ Freeze ALL past blocks (structure preserved)
+  const frozenPast = timeBlocks.filter(b =>
+    blockStartDate(b.startTime) < now
+  );
+
+  // 2️⃣ Regenerate future blocks with NEW interval
+  const futureStart = roundUpToInterval(now, newInterval);
+
+  const regeneratedFuture = generateTimeBlocks(
+    dateToHHMM(futureStart),
+    dateToHHMM(sleepTime),
+    newInterval
+  );
+
+  // 3️⃣ Merge persisted work
+  const persisted = await loadPersistedTimeBlocks(authUser.id);
+  const persistedMap = new Map(
+    persisted.map(p => [p.start_time, p])
+  );
+
+  const hydratedFuture = regeneratedFuture.map(b => {
+    const p = persistedMap.get(b.startTime);
+    return p
+      ? {
+          ...b,
+          completed: p.completed,
+          categoryId: p.category_id,
+          description: p.description ?? "",
+        }
+      : b;
+  });
+
+  setTimeBlocks([...frozenPast, ...hydratedFuture]);
   setActiveConfigModal(null);
 }
 
