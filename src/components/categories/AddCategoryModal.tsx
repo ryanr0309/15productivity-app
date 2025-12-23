@@ -54,6 +54,8 @@ const handleSave = async () => {
     authUser.id
   );
 
+    console.log("NEW CATEGORY RETURNED:", newCategory);
+
   onCreate(newCategory);
   onClose();
 };

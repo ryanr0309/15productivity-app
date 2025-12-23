@@ -12,7 +12,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { supabase } from "../../lib/supabase";
-
 import Modal from "react-native-modal";
 
 import { formatTime } from "../../utils/time";
@@ -28,6 +27,8 @@ import { Block } from "../../utils/timeBlocks";
 import { dateToHHMM } from "../../utils/dateToHHMM";
 import { Category } from "../../constants/categories";
 import { User } from "@supabase/supabase-js";
+import { deleteCategory, fetchCategories } from "../../services/categories";
+import { useAuthStore } from "../../store/useAuthStore";
 
 /* ===================================================== */
 
@@ -40,42 +41,53 @@ export default function Home() {
   const [activeBlockIndex, setActiveBlockIndex] = useState<number | null>(null);
   const [isTimeBlockModalOpen, setIsTimeBlockModalOpen] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [authUser, setAuthUser] = useState<User | null>(null);
+  const authUser = useAuthStore((s) => s.user);
 
 
   const heroBlock = openDay ? getCurrentBlock(blocks) : null;
   const dayId = openDay?.id ?? null;
 
+  function handleAddCategory(category: Category) {
+  setCategories(prev => [...prev, category]);
+}
+
+async function handleDeleteCategory(categoryId: string) {
+  // 1️⃣ Optimistic UI update
+  setCategories(prev =>
+    prev.filter(category => category.id !== categoryId)
+  );
+
+  // 2️⃣ Persist deletion
+  try {
+    await deleteCategory(categoryId);
+  } catch (err) {
+    console.error(err);
+    // Optional: refetch categories or show toast
+  }
+}
+
+
   /* ================= LOAD OPEN DAY ================= */
 
-  useEffect(() => {
-  supabase.auth.getUser().then(({ data }) => {
-    setAuthUser(data.user);
-  });
-}, []);
 
 
-  useEffect(() => {
-  if (!authUser) return;
+useEffect(() => {
+  if (!authUser?.id) return;
 
-  async function fetchCategories() {
+  async function loadCategories() {
     if (!authUser) return;
-    const { data, error } = await supabase
-      .from("categories")
-      .select("*")
-      .eq("user_id", authUser.id)
-      .order("created_at", { ascending: true });
-
-    if (error) {
-      console.error("Failed to fetch categories", error);
-      return;
+    try {
+      const data = await fetchCategories(authUser.id);
+      setCategories(data ?? []);
+    } catch (err) {
+      console.error("Failed to fetch categories", err);
     }
-
-    setCategories(data ?? []);
   }
 
-  fetchCategories();
+  loadCategories();
 }, [authUser?.id]);
+
+
 
 
   useEffect(() => {
@@ -103,6 +115,14 @@ export default function Home() {
   }, []);
 
   /* ================= LOAD BLOCKS ================= */
+
+  useEffect(() => {
+  console.log(
+    "HOME categories state:",
+    categories.map(c => c.name)
+  );
+}, [categories]);
+
 
   useEffect(() => {
     if (!openDay) return;
@@ -384,8 +404,8 @@ export default function Home() {
     initialCategoryId={activeBlock.categoryId}
     initialDescription={activeBlock.description}
     categories={categories}
-    onAddCategory={() => {}}
-    onDeleteCategory={() => {}}
+    onAddCategory={handleAddCategory}
+    onDeleteCategory={handleDeleteCategory}
     onSave={handleSaveTimeBlock}
     onClose={() => {
       setIsTimeBlockModalOpen(false);
@@ -415,6 +435,7 @@ function ContextPill({
     </View>
   );
 }
+
 
 /* ================= STYLES ================= */
 

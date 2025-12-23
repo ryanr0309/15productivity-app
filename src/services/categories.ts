@@ -10,34 +10,44 @@ export async function addCategory(
   const { data, error } = await supabase
     .from("categories")
     .insert({
-      user_id: userId,
       label,
       color,
+      user_id: userId,
     })
-    .select()
+    .select("id, label, color")
     .single();
 
   if (error || !data) {
-    console.error(error);
-    throw new Error("Failed to add category");
+    throw error;
   }
 
-  return data;
+  // 🔑 NORMALIZE HERE
+  return {
+    id: data.id,
+    name: data.label, // 👈 FIX
+    color: data.color,
+  };
 }
 
 
 
 
-export async function fetchCategories(userId: string) {
+export async function fetchCategories(userId: string): Promise<Category[]> {
   const { data, error } = await supabase
     .from("categories")
-    .select("*")
+    .select("id, label, color")
     .eq("user_id", userId)
     .order("created_at", { ascending: true });
 
   if (error) throw error;
-  return data;
+
+  return (data ?? []).map(c => ({
+    id: c.id,
+    name: c.label, // ✅ mapped
+    color: c.color,
+  }));
 }
+
 
 export async function deleteCategory(categoryId: string): Promise<void> {
   const { error } = await supabase

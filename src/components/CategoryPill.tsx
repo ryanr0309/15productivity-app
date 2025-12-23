@@ -34,7 +34,7 @@ export default function CategoryPill({
       />
 
       {/* Name */}
-      <Text style={styles.text}>{category.label}</Text>
+      <Text style={styles.text}>{category.name}</Text>
 
       {/* Delete (only if provided) */}
       {onDelete && (
