@@ -1,11 +1,4 @@
-export function formatTime(date: Date) {
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
-  const period = hours >= 12 ? "PM" : "AM";
-  const h12 = hours % 12 || 12;
 
-  return `${h12}:${minutes.toString().padStart(2, "0")}${period}`;
-}
 
 export function getBlockDate(timeLabel: string): Date {
   const now = new Date();
@@ -44,4 +37,44 @@ export function roundUpToInterval(date: Date, interval: number) {
   const d = new Date(date);
   d.setHours(Math.floor(rounded / 60), rounded % 60, 0, 0);
   return d;
+}
+
+export function formatTime(ts?: string | null) {
+  if (!ts) return "—";
+  return new Date(ts).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export function getCurrentBlockLabel(day: any) {
+  if (!day) return "—";
+
+  const start = new Date(day.start_time);
+  const now = new Date();
+
+  const minutesSinceStart =
+    (now.getTime() - start.getTime()) / 60000;
+
+  const blockIndex = Math.floor(
+    minutesSinceStart / day.interval_minutes
+  );
+
+  const blockStart = new Date(
+    start.getTime() +
+      blockIndex * day.interval_minutes * 60000
+  );
+  const blockEnd = new Date(
+    blockStart.getTime() +
+      day.interval_minutes * 60000
+  );
+
+  return `${formatTime(blockStart.toISOString())} – ${formatTime(
+    blockEnd.toISOString()
+  )}`;
+}
+
+export function normalizeToInterval(date: Date, intervalMinutes: number) {
+  const ms = intervalMinutes * 60 * 1000;
+  return new Date(Math.floor(date.getTime() / ms) * ms);
 }
