@@ -1,24 +1,21 @@
-export function normalizeBlocks(blocks: any[]) {
+import { Block } from "./timeBlocks";
+
+export function getCurrentBlockIndex(blocks: Block[]) {
   const now = new Date();
 
-  return blocks.map((block) => {
-    const start = new Date(block.start_time);
-    const end = new Date(block.end_time);
+  for (let i = 0; i < blocks.length; i++) {
+    const start = new Date(blocks[i].startISO);
+    const end = new Date(blocks[i].endISO);
 
-    if (block.status === "locked") return block;
-
-    if (end <= now && block.status === "upcoming") {
-      return { ...block, status: "missed" };
+    if (now >= start && now < end) {
+      return i;
     }
+  }
 
-    if (start <= now && now < end) {
-      return { ...block, status: "active" };
-    }
-
-    return block;
-  });
+  return null;
 }
 
-export function getCurrentBlock(blocks: any[]) {
-  return blocks.find((b) => b.status === "active") ?? null;
+export function getCurrentBlock(blocks: Block[]) {
+  const index = getCurrentBlockIndex(blocks);
+  return index !== null ? blocks[index] : null;
 }

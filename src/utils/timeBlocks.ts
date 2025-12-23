@@ -5,13 +5,21 @@ import { getBlockDate } from "./time";
 
 export type Block = {
   id: string;
+
+  // UI-friendly
   startTime: string;     // "HH:MM"
   endTime: string;       // "HH:MM"
   timeLabel: string;     // "8:00AM – 8:45AM"
-  completed: boolean;
+
+  completed: boolean;    // derived from DB status
   categoryId: string | null;
   description: string;
+
+  // keep these if you need exact timestamps later (recommended)
+  startISO: string;
+  endISO: string;
 };
+
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -41,51 +49,6 @@ function formatMinutes(minutes: number): string {
 /**
  * Generates time blocks between wake and sleep times
  */
-export function generateTimeBlocks(
-  wakeTime: string,
-  sleepTime: string,
-  intervalMinutes: number
-): Block[] {
-  const blocks: Block[] = [];
-
-  const start = toMinutes(wakeTime);
-  const end = toMinutes(sleepTime);
-
-  if (intervalMinutes <= 0 || end <= start) return blocks;
-
-  let current = start;
-
-  while (current + intervalMinutes <= end) {
-    const startMinutes = current;
-    const endMinutes = current + intervalMinutes;
-
-    const startTime = `${Math.floor(startMinutes / 60)
-      .toString()
-      .padStart(2, "0")}:${(startMinutes % 60)
-      .toString()
-      .padStart(2, "0")}`;
-
-    const endTime = `${Math.floor(endMinutes / 60)
-      .toString()
-      .padStart(2, "0")}:${(endMinutes % 60)
-      .toString()
-      .padStart(2, "0")}`;
-
-    blocks.push({
-      id: `block-${startMinutes}`,
-      startTime,
-      endTime,
-      timeLabel: `${formatMinutes(startMinutes)}`,
-      completed: false,
-      categoryId: null,
-      description: "",
-    });
-
-    current += intervalMinutes;
-  }
-
-  return blocks;
-}
 
 export async function loadPersistedTimeBlocks(userId: string) {
   const { data, error } = await supabase

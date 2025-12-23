@@ -1,96 +1,58 @@
-import { Pressable, Text, StyleSheet, ViewStyle } from "react-native";
-import { colors } from "../../constants/colors";
-import { Category, getCategoryById } from "../../constants/categories";
 import React from "react";
+import { Pressable, Text, StyleSheet } from "react-native";
+import { Block } from "../../utils/timeBlocks";
 
-
-type TimeBlockCardProps = {
-  time: string;
-  completed?: boolean;
-  active?: boolean;
-  categoryLabel?: string;
-  categoryColor?: string;
-  disabled?: boolean;
-  onPress?: () => void;
-  style?: ViewStyle;
+type Props = {
+  block: Block;
+  onPress: () => void;
 };
 
-
-
-
-export default function TimeBlockCard({
-  time,
-  completed = false,
-  active = false,
-  categoryLabel,
-  categoryColor,
-  onPress,
-  disabled = false,
-  style,
-}: TimeBlockCardProps) {
+export default function TimeBlockCard({ block, onPress }: Props) {
+  const displayTime = block.timeLabel.split("–")[0].trim();
   return (
     <Pressable
       onPress={onPress}
-      disabled={disabled}
       style={[
         styles.card,
-        completed && styles.completed,
-        active && styles.active,
-        disabled && styles.disabled,
-        categoryColor ? { backgroundColor: categoryColor } : null, // ✅ color card
-        style,
+        block.completed && styles.cardCompleted,
       ]}
     >
-      {completed && categoryLabel ? (
-        <>
-          <Text style={styles.categoryText}>{categoryLabel}</Text>
-          <Text style={styles.timeSubtext}>{time}</Text>
-        </>
-      ) : (
-        <Text style={styles.timeText}>{time}</Text>
-      )}
+      <Text style={styles.timeText}>{displayTime}</Text>
     </Pressable>
   );
 }
 
-
-
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.card, // rgba(0,0,0,0.5)
-    borderRadius: 12,
-    height: 56,
-    justifyContent: "center",
+    width: "30%",
+    height: 64,                 // 👈 slightly shorter = tighter grid
+    borderRadius: 14,           // 👈 softer corners like screenshot
+    backgroundColor: "#1E2A4A", // 👈 slightly lighter than background
     alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+
+    // subtle depth
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3, // Android
+  },
+
+  cardCompleted: {
+    backgroundColor: "#1F8F5F", // 👈 green but muted (not neon)
   },
 
   timeText: {
-    color: colors.textPrimary,
-    fontSize: 14,
+    color: "#FFFFFF",
+    fontSize: 13,
     fontWeight: "600",
+    letterSpacing: 0.2,
+    textAlign: "center",
+
+    // Android vertical centering fix
+    includeFontPadding: false,
+    lineHeight: 14,
   },
-
-  completed: {
-    opacity: 0.7, // subtle difference for now
-  },
-
-  active: {
-    borderWidth: 1,
-    borderColor: colors.accent, // future highlight
-  },
-  categoryText: {
-  color: "#FFFFFF",
-  fontSize: 14,
-  fontWeight: "700",
-},
-
-timeSubtext: {
-  color: "rgba(255,255,255,0.85)",
-  fontSize: 12,
-  marginTop: 4,
-},
-disabled: {
-  opacity: 0.35,
-}
-
 });

@@ -5,85 +5,158 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Pressable,
+  Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { supabase } from "../../lib/supabase"; // adjust path
-import { formatTime, getCurrentBlockLabel } from "../../utils/time";
-import { getCurrentBlock } from "../../utils/blocks";
-import { normalizeBlocks } from "../../utils/blocks";
-import {normalizeToInterval} from "../../utils/time";
+import { supabase } from "../../lib/supabase";
 
+import Modal from "react-native-modal";
 
-/**
- * STALE DATA (replace later)
- */
+import { formatTime } from "../../utils/time";
+import {
+  getCurrentBlock,
+  getCurrentBlockIndex
+} from "../../utils/blocks";
+import { normalizeToInterval } from "../../utils/time";
 
+import TimeBlockCard from "../../components/time-block/TimeBlockCard";
+import TimeBlockModal from "../../components/time-block/TimeBlockModal";
+import { Block } from "../../utils/timeBlocks";
+import { dateToHHMM } from "../../utils/dateToHHMM";
+import { Category } from "../../constants/categories";
+import { User } from "@supabase/supabase-js";
 
+/* ===================================================== */
 
 export default function Home() {
-
   const [loading, setLoading] = useState(true);
-const [openDay, setOpenDay] = useState<any | null>(null);
-const [blocks, setBlocks] = useState<any[]>([]);
-const heroBlock = openDay ? getCurrentBlock(blocks) : null;
-
-const timelineBlocks = openDay
-  ? blocks.filter((b) => b.status !== "active")
-  : [];
+  const [openDay, setOpenDay] = useState<any | null>(null);
+  const [blocks, setBlocks] = useState<Block[]>([]);
 
 
-  
-useEffect(() => {
-  if (!openDay) return;
+  const [activeBlockIndex, setActiveBlockIndex] = useState<number | null>(null);
+  const [isTimeBlockModalOpen, setIsTimeBlockModalOpen] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [authUser, setAuthUser] = useState<User | null>(null);
 
-  async function loadAndEnsureBlocks() {
-    await ensureTimeBlocksExist(openDay);
 
-    const { data } = await supabase
-      .from("time_blocks")
-      .select("*")
-      .eq("day_id", openDay.id)
-      .order("start_time", { ascending: true });
+  const heroBlock = openDay ? getCurrentBlock(blocks) : null;
+  const dayId = openDay?.id ?? null;
 
-    setBlocks(normalizeBlocks(data ?? []));
-  }
+  /* ================= LOAD OPEN DAY ================= */
 
-  loadAndEnsureBlocks();
-}, [openDay]);
+  useEffect(() => {
+  supabase.auth.getUser().then(({ data }) => {
+    setAuthUser(data.user);
+  });
+}, []);
 
 
   useEffect(() => {
-  async function loadOpenDay() {
-    setLoading(true);
+  if (!authUser) return;
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  async function fetchCategories() {
+    if (!authUser) return;
+    const { data, error } = await supabase
+      .from("categories")
+      .select("*")
+      .eq("user_id", authUser.id)
+      .order("created_at", { ascending: true });
 
-    if (!user) {
-      setOpenDay(null);
-      setLoading(false);
+    if (error) {
+      console.error("Failed to fetch categories", error);
       return;
     }
 
-    const { data } = await supabase
-  .from("days")
-  .select("*")
-  .eq("user_id", user.id)
-  .eq("status", "open")
-  .maybeSingle();
-
-  setOpenDay(data ?? null);
-
-    setLoading(false);
+    setCategories(data ?? []);
   }
 
-  loadOpenDay();
-}, []);
+  fetchCategories();
+}, [authUser?.id]);
 
-async function ensureTimeBlocksExist(day: any) {
+
+  useEffect(() => {
+    async function loadOpenDay() {
+      setLoading(true);
+
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth?.user) {
+        setLoading(false);
+        return;
+      }
+
+      const { data } = await supabase
+        .from("days")
+        .select("*")
+        .eq("user_id", auth.user.id)
+        .eq("status", "open")
+        .maybeSingle();
+
+      setOpenDay(data ?? null);
+      setLoading(false);
+    }
+
+    loadOpenDay();
+  }, []);
+
+  /* ================= LOAD BLOCKS ================= */
+
+  useEffect(() => {
+    if (!openDay) return;
+
+    async function loadBlocks() {
+      await ensureTimeBlocksExist(openDay);
+
+      const { data } = await supabase
+        .from("time_blocks")
+        .select("*")
+        .eq("day_id", openDay.id)
+        .order("start_time", { ascending: true });
+
+      setBlocks(normalizeBlocks(data ?? []));
+    }
+
+    loadBlocks();
+  }, [openDay]);
+
+  /* ================= HELPERS ================= */
+
+  function handleOpenBlock(blockIndex: number) {
+    setActiveBlockIndex(blockIndex);
+    setIsTimeBlockModalOpen(true);
+  }
+
+  function handleLogNow() {
+    const index = getCurrentBlockIndex(blocks);
+    if (index === null) return;
+    handleOpenBlock(index);
+  }
+
+  function normalizeBlocks(rows: any[]): Block[] {
+  return rows.map((row) => {
+    const startISO = row.start_time; // string
+    const endISO = row.end_time;     // string
+
+    return {
+      id: row.id,
+      startISO,
+      endISO,
+
+      startTime: dateToHHMM(startISO),
+      endTime: dateToHHMM(endISO),
+      timeLabel: `${formatTime(startISO)} – ${formatTime(endISO)}`,
+
+      completed: row.status === "logged",
+      categoryId: row.category_id ?? null,
+      description: row.description ?? "",
+    };
+  });
+}
+
+  async function ensureTimeBlocksExist(day: any) {
   const { data: existingBlocks } = await supabase
     .from("time_blocks")
     .select("start_time, end_time")
@@ -91,7 +164,7 @@ async function ensureTimeBlocksExist(day: any) {
     .order("start_time", { ascending: true });
 
   const intervalMs = day.interval_minutes * 60 * 1000;
-  const now = new Date();
+  const now = Date.now();
 
   let nextStart: Date;
 
@@ -101,15 +174,15 @@ async function ensureTimeBlocksExist(day: any) {
     );
   } else {
     nextStart = normalizeToInterval(
-  new Date(day.start_time),
-  day.interval_minutes
-);
-
+      new Date(day.start_time),
+      day.interval_minutes
+    );
   }
 
-  const blocksToInsert = [];
+  const blocksToInsert: any[] = [];
 
-  while (nextStart < new Date(now.getTime() + intervalMs)) {
+  // ✅ Generate until one block PAST now
+  while (nextStart.getTime() < now + intervalMs) {
     const start = new Date(nextStart);
     const end = new Date(start.getTime() + intervalMs);
 
@@ -123,28 +196,70 @@ async function ensureTimeBlocksExist(day: any) {
     nextStart = end;
   }
 
+  // 🔥 THIS WAS MISSING
   if (blocksToInsert.length > 0) {
     await supabase.from("time_blocks").insert(blocksToInsert);
   }
+
 }
 
 
+
+
+  async function handleSaveTimeBlock({
+    dayId,
+    blockIndex,
+    categoryId,
+    description,
+  }: {
+    dayId: string;
+    blockIndex: number;
+    categoryId: string | null;
+    description: string;
+  }) {
+    // Optimistic update
+    setBlocks((prev) => {
+      const copy = [...prev];
+      copy[blockIndex] = {
+  ...copy[blockIndex],
+  categoryId,
+  description,
+  completed: true,
+};
+
+      return copy;
+    });
+
+    await supabase
+  .from("time_blocks")
+  .update({
+    category_id: categoryId,
+    description,
+    status: "logged",
+  })
+  .eq("id", blocks[blockIndex].id);
+
+
+    setIsTimeBlockModalOpen(false);
+    setActiveBlockIndex(null);
+  }
+
+
+  const activeBlock =
+  activeBlockIndex !== null ? blocks[activeBlockIndex] : null;
+
+  /* ================= RENDER ================= */
+
   return (
-    <LinearGradient
-      colors={["#0B132B", "#1C2541"]}
-      style={styles.container}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-      >
+    <LinearGradient colors={["#0B132B", "#1C2541"]} style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scroll}>
         {/* HEADER */}
         <View style={styles.header}>
           <Ionicons name="time-outline" size={20} color="#FFFFFF" />
           <Text style={styles.headerText}>15 Productivity</Text>
         </View>
 
-       {!loading && !openDay && (
+        {!loading && !openDay && (
   <TouchableOpacity
     onPress={() => router.push("/start-day")}
     style={{
@@ -189,30 +304,26 @@ async function ensureTimeBlocksExist(day: any) {
 </View>
 
 
-        {/* PROMPT */}
-        <Text style={styles.prompt}>What are you doing right now?</Text>
 
-        {/* CURRENT BLOCK HERO */}
-        <View style={styles.heroCard}>
-          <View style={styles.heroHeader}>
-            <Ionicons name="calendar-outline" size={18} color="#AAB4D6" />
-            <Text style={styles.heroTime}>
-  {heroBlock
-    ? `${formatTime(heroBlock.start_time)} – ${formatTime(heroBlock.end_time)}`
-    : "No active block"}
+
+        {openDay && (
+          <>
+            {/* PROMPT */}
+            <Text style={styles.prompt}>What are you doing right now?</Text>
+
+            {/* HERO */}
+            <View style={styles.heroCard}>
+              <Text style={styles.heroTime}>
+  {heroBlock ? heroBlock.timeLabel : "No active block"}
 </Text>
 
 
-          </View>
+              <Pressable onPress={handleLogNow} style={styles.primaryButton}>
+                <Text style={styles.primaryButtonText}>Log Now</Text>
+              </Pressable>
+            </View>
 
-    
-
-          <TouchableOpacity style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>Log Now</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* PRODUCTIVITY BAR */}
+{/* PRODUCTIVITY BAR */}
         <View style={styles.productivity}>
           <Text style={styles.productivityLabel}>Productivity Today</Text>
           <View style={styles.progressTrack}>
@@ -226,35 +337,69 @@ async function ensureTimeBlocksExist(day: any) {
           <Text style={styles.sleepText}>Log Sleep</Text>
         </TouchableOpacity>
 
-        {/* TIME BLOCK GRID */}
-        <View style={styles.grid}>
-  {timelineBlocks.map((block) => (
-    <View
+            {/* GRID */}
+            <View style={styles.grid}>
+  {blocks.map((block, index) => (
+    <TimeBlockCard
       key={block.id}
-      style={[
-        styles.block,
-        block.status === "logged" && styles.blockLogged,
-        block.status === "missed" && styles.blockMissed,
-      ]}
-    >
-      <View style={styles.blockInner}>
-        <Text style={styles.blockLabel}>
-          {formatTime(block.start_time)}
-        </Text>
-      </View>
-    </View>
+      block={block}
+      onPress={() => handleOpenBlock(index)}
+    />
   ))}
 </View>
 
 
+          </>
+        )}
+
+      
+
+
       </ScrollView>
+
+      {/* MODAL */}
+      {activeBlock && openDay && (
+        
+  <Modal
+    isVisible={isTimeBlockModalOpen}
+    onSwipeComplete={() => {
+      setIsTimeBlockModalOpen(false);
+      setActiveBlockIndex(null);
+    }}
+    swipeDirection="down"
+    onBackdropPress={() => {
+      setIsTimeBlockModalOpen(false);
+      setActiveBlockIndex(null);
+    }}
+    backdropOpacity={0.5}
+    style={styles.modalContainer}
+    propagateSwipe // 👈 IMPORTANT if modal scrolls
+  >
+    <View style={styles.modalContent}>
+  <TimeBlockModal
+    dayId={openDay.id}
+    blockIndex={activeBlockIndex as number}
+    timeRange={activeBlock.timeLabel}
+    dateLabel={new Date().toDateString()}
+    initialCategoryId={activeBlock.categoryId}
+    initialDescription={activeBlock.description}
+    categories={categories}
+    onAddCategory={() => {}}
+    onDeleteCategory={() => {}}
+    onSave={handleSaveTimeBlock}
+    onClose={() => {
+      setIsTimeBlockModalOpen(false);
+      setActiveBlockIndex(null);
+    }}
+  />
+  </View>
+  </Modal>
+)}
+
+
     </LinearGradient>
   );
 }
-
-/**
- * SMALL COMPONENTS
- */
 
 function ContextPill({
   label,
@@ -271,30 +416,75 @@ function ContextPill({
   );
 }
 
-/**
- * STYLES
- */
+/* ================= STYLES ================= */
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  container: { flex: 1 },
+  scroll: { padding: 20, paddingBottom: 40 },
+
+  header: { flexDirection: "row", gap: 8, marginBottom: 20 },
+  headerText: { color: "#FFF", fontSize: 18, fontWeight: "600" },
+
+  startDay: {
+    backgroundColor: "#24304D",
+    padding: 14,
+    borderRadius: 14,
+    alignSelf: "center",
   },
-  scroll: {
-    padding: 20,
-    paddingBottom: 40,
+  sheetContainer: {
+    minHeight: "50%",
+    paddingHorizontal: 20,
+    paddingTop: 8,
   },
 
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
+  startDayText: { color: "#FFF", fontWeight: "600" },
+
+  prompt: { color: "#AAB4D6", marginBottom: 12 },
+
+  heroCard: {
+    backgroundColor: "#1C2541",
+    padding: 20,
+    borderRadius: 20,
     marginBottom: 20,
-    gap: 8,
   },
-  headerText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "600",
+  heroTime: { color: "#FFF", fontSize: 18, fontWeight: "600" },
+
+  primaryButton: {
+    backgroundColor: "#4DA3FF",
+    marginTop: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: "center",
   },
+  primaryButtonText: {
+    color: "#0B132B",
+    fontWeight: "700",
+  },
+
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
+
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  modalContainer: {
+  justifyContent: "flex-end",
+  margin: 0,
+},
+
+modalContent: {
+  backgroundColor: "#F7F7F7",
+  borderTopLeftRadius: 20,
+  borderTopRightRadius: 20,
+  padding: 10,
+  minHeight: 450,
+},
+
 
   contextRow: {
     flexDirection: "row",
@@ -320,46 +510,19 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  prompt: {
-    color: "#AAB4D6",
-    fontSize: 14,
-    marginBottom: 12,
-  },
-
-  heroCard: {
-    backgroundColor: "#1C2541",
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 20,
-  },
   heroHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     marginBottom: 6,
   },
-  heroTime: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "600",
-  },
+
   heroWarning: {
     color: "#FACC15",
     fontSize: 13,
     marginBottom: 14,
   },
 
-  primaryButton: {
-    backgroundColor: "#4DA3FF",
-    paddingVertical: 12,
-    borderRadius: 14,
-    alignItems: "center",
-  },
-  primaryButtonText: {
-    color: "#0B132B",
-    fontSize: 15,
-    fontWeight: "700",
-  },
 
   productivity: {
     marginBottom: 16,
@@ -396,12 +559,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
   },
-  grid: {
-  flexDirection: "row",
-  flexWrap: "wrap",
-  justifyContent: "space-between",
-  rowGap: 12,
-},
+
 
 block: {
   width: "30%",
@@ -434,7 +592,8 @@ blockLogged: {
 blockMissed: {
   backgroundColor: "#374151",
 },
-
-
- 
+press: {
+  borderWidth: 2,
+  borderColor: "red", 
+},
 });

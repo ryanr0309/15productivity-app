@@ -1,3 +1,4 @@
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -6,32 +7,43 @@ import {
   TextInput,
 } from "react-native";
 import { colors } from "../../constants/colors";
-import React from "react";
-import { useState, useEffect } from "react";
-import AddCategoryModal from "../categories/AddCategoryModal";
+import { Category } from "../../constants/categories";
 import CategoryPill from "../../components/CategoryPill";
-import { Category} from "../../constants/categories";
+import AddCategoryModal from "../categories/AddCategoryModal";
+
 
 type Props = {
+  /** Identity */
+  dayId: string;
+  blockIndex: number;
+
+  /** Display */
   timeRange: string;
   dateLabel: string;
 
+  /** Initial values (for edit mode) */
   initialCategoryId: string | null;
   initialDescription: string;
 
+  /** Categories */
   categories: Category[];
-
   onAddCategory: (category: Category) => void;
   onDeleteCategory: (categoryId: string) => void;
 
+  /** Save handler */
   onSave: (data: {
+    dayId: string;
+    blockIndex: number;
     categoryId: string | null;
     description: string;
   }) => void;
+
+  onClose: () => void; // ✅ ADD THIS
 };
 
-
 export default function TimeBlockModal({
+  dayId,
+  blockIndex,
   timeRange,
   dateLabel,
   initialCategoryId,
@@ -40,56 +52,71 @@ export default function TimeBlockModal({
   onAddCategory,
   onDeleteCategory,
   onSave,
+  onClose, // ✅ ADD THIS
 }: Props) {
 
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
+    null
+  );
   const [description, setDescription] = useState("");
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
 
-  function handleSave() {
-    onSave({
-      categoryId: selectedCategoryId,
-      description,
-    });
-  }
+  const isEditing =
+    Boolean(initialCategoryId) || initialDescription.trim().length > 0;
+
+  const canSave =
+    selectedCategoryId !== null || description.trim().length > 0;
 
   useEffect(() => {
-  setSelectedCategoryId(initialCategoryId);
-  setDescription(initialDescription);
-}, [initialCategoryId, initialDescription]);
+    setSelectedCategoryId(initialCategoryId);
+    setDescription(initialDescription);
+  }, [initialCategoryId, initialDescription]);
+
+  function handleSave() {
+  if (!canSave) return;
+
+  onSave({
+    dayId,
+    blockIndex,
+    categoryId: selectedCategoryId,
+    description,
+  });
+
+  onClose(); // ✅ CLOSE MODAL
+}
 
 
   return (
-    <View style={styles.sheet}>
+    <View style={styles.sheetContainer}>
       <View style={styles.handle} />
 
       <Text style={styles.time}>{timeRange}</Text>
       <Text style={styles.date}>{dateLabel}</Text>
 
+      {/* CATEGORY SECTION */}
       <Text style={styles.sectionTitle}>Choose a Category</Text>
 
       <View style={styles.pillRow}>
-  {categories.map(category => (
-    <CategoryPill
-  key={category.id}
-  category={category}
-  selected={category.id === selectedCategoryId}
-  onPress={() => setSelectedCategoryId(category.id)}
-  onDelete={() => onDeleteCategory(category.id)}
-/>
+        {categories.map((category) => (
+          <CategoryPill
+            key={category.id}
+            category={category}
+            selected={category.id === selectedCategoryId}
+            onPress={() => setSelectedCategoryId(category.id)}
+            onDelete={() => onDeleteCategory(category.id)}
+          />
+        ))}
 
-  ))}
-  <Pressable
-      onPress={() => setIsAddCategoryOpen(true)}
-      style={[styles.pill, styles.addPill]}
-      >
-      <Text style={styles.addPillText}>＋</Text>
-      </Pressable>
-</View>
+        <Pressable
+          onPress={() => setIsAddCategoryOpen(true)}
+          style={[styles.pill, styles.addPill]}
+        >
+          <Text style={styles.addPillText}>＋</Text>
+        </Pressable>
+      </View>
 
-
-      
-      <Text style={styles.sectionTitle} >Task Description</Text>
+      {/* DESCRIPTION SECTION */}
+      <Text style={styles.sectionTitle}>Task Description</Text>
 
       <TextInput
         value={description}
@@ -97,42 +124,41 @@ export default function TimeBlockModal({
         placeholder="What did you work on?"
         placeholderTextColor={colors.textSecondary}
         style={styles.input}
+        multiline
       />
 
       <Text style={styles.helper}>
-        Meaningful descriptions = better feedback later
+        Meaningful descriptions = better insights later
       </Text>
 
-      <Pressable onPress={handleSave} style={styles.saveButton}>
-        <Text style={styles.saveText}>Save</Text>
+      {/* SAVE BUTTON */}
+      <Pressable
+        onPress={handleSave}
+        disabled={!canSave}
+        style={[
+          styles.saveButton,
+          !canSave && styles.saveButtonDisabled,
+        ]}
+      >
+        <Text style={styles.saveText}>
+          {isEditing ? "Update" : "Log"}
+        </Text>
       </Pressable>
 
+      {/* ADD CATEGORY MODAL */}
       <AddCategoryModal
-  visible={isAddCategoryOpen}
-  onClose={() => setIsAddCategoryOpen(false)}
-  categories={categories}
-  onCreate={(category) => {
-    onAddCategory(category);
-    setIsAddCategoryOpen(false);
-  }}
-/>
-
-
-
-
+        visible={isAddCategoryOpen}
+        onClose={() => setIsAddCategoryOpen(false)}
+        categories={categories}
+        onCreate={(category) => {
+          onAddCategory(category);
+          setIsAddCategoryOpen(false);
+        }}
+      />
     </View>
-
   );
 }
-
-
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.4)",
-  },
-
   sheet: {
     backgroundColor: "#F7F7F7",
     borderTopLeftRadius: 20,
@@ -153,6 +179,12 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
     marginBottom: 4,
+    color: "#000",
+  },
+  sheetContainer: {
+    height: 100,
+    paddingHorizontal: 20,
+    paddingTop: 8,
   },
 
   date: {
@@ -165,7 +197,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     marginBottom: 8,
-    color: "#000000"
+    color: "#000",
+  },
+
+  pillRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 16,
+  },
+
+  pill: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.05)",
+  },
+
+  addPill: {
+    borderWidth: 1,
+    borderColor: "#CCC",
+    backgroundColor: "transparent",
+  },
+
+  addPillText: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#555",
   },
 
   input: {
@@ -190,46 +248,13 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
 
+  saveButtonDisabled: {
+    backgroundColor: "#A0E5BF",
+  },
+
   saveText: {
     color: "#FFF",
     fontWeight: "700",
     fontSize: 16,
   },
-  pillRow: {
-  flexDirection: "row",
-  flexWrap: "wrap",
-  gap: 8,
-  marginBottom: 16,
-},
-
-pill: {
-  paddingVertical: 8,
-  paddingHorizontal: 12,
-  borderRadius: 20,
-  backgroundColor: "rgba(255,255,255,0.1)",
-},
-
-pillSelected: {
-  backgroundColor: colors.accent,
-},
-
-pillText: {
-  color: "#000000",
-  fontSize: 14,
-  fontWeight: "500",
-},
-
-addPill: {
-  borderWidth: 1,
-  borderColor: "#CCC",
-  backgroundColor: "transparent",
-},
-
-addPillText: {
-  fontSize: 20,
-  fontWeight: "700",
-  color: "#555",
-},
-
-
 });
