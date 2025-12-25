@@ -1,23 +1,69 @@
 import React from "react";
-import { Pressable, Text, StyleSheet } from "react-native";
+import { Pressable, Text, StyleSheet, View } from "react-native";
 import { Block } from "../../utils/timeBlocks";
+import { getBlockState, getBlockStyles } from "../../utils/timeBlocks";
+import { Category } from "../../constants/categories";
 
 type Props = {
   block: Block;
+  category?: Category;
   onPress: () => void;
 };
 
-export default function TimeBlockCard({ block, onPress }: Props) {
-  const displayTime = block.timeLabel.split("–")[0].trim();
+export default function TimeBlockCard({ block, category, onPress }: Props) {
+  const state = getBlockState(block);
+  const stylesForState = getBlockStyles(state, category?.color);
+
+  const displayTime =
+  typeof block.timeLabel === "string"
+    ? block.timeLabel.split("–")[0].trim()
+    : new Date(block.startTime).toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+      });
+
+  
   return (
     <Pressable
       onPress={onPress}
       style={[
         styles.card,
-        block.completed && styles.cardCompleted,
+        { backgroundColor: stylesForState.backgroundColor },
+        stylesForState.outline && {
+          borderWidth: 2,
+          borderColor: stylesForState.outline,
+        },
+        { opacity: stylesForState.opacity },
       ]}
     >
-      <Text style={styles.timeText}>{displayTime}</Text>
+      {/* COMPLETED BLOCK */}
+      {state === "completed" ? (
+        <>
+          {/* CATEGORY (PRIMARY) */}
+          <Text
+            style={styles.categoryText}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {category?.name ?? "Completed"}
+          </Text>
+
+          {/* TIME (SECONDARY) */}
+          <Text style={styles.timeTextSecondary}>
+            {displayTime}
+          </Text>
+
+          {/* COMPLETION INDICATOR */}
+          <View style={styles.completedIndicator}>
+            <View style={styles.completedDot} />
+          </View>
+        </>
+      ) : (
+        /* NOT COMPLETED */
+        <Text style={styles.timeTextPrimary}>
+          {displayTime}
+        </Text>
+      )}
     </Pressable>
   );
 }
@@ -25,34 +71,57 @@ export default function TimeBlockCard({ block, onPress }: Props) {
 const styles = StyleSheet.create({
   card: {
     width: "30%",
-    height: 64,                 // 👈 slightly shorter = tighter grid
-    borderRadius: 14,           // 👈 softer corners like screenshot
-    backgroundColor: "#1E2A4A", // 👈 slightly lighter than background
-    alignItems: "center",
+    height: 72,
+    borderRadius: 14,
+    paddingHorizontal: 10,
     justifyContent: "center",
     marginBottom: 12,
-
-    // subtle depth
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3, // Android
   },
 
-  cardCompleted: {
-    backgroundColor: "#1F8F5F", // 👈 green but muted (not neon)
-  },
-
-  timeText: {
+  /* NOT COMPLETED */
+  timeTextPrimary: {
     color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "600",
-    letterSpacing: 0.2,
     textAlign: "center",
-
-    // Android vertical centering fix
     includeFontPadding: false,
     lineHeight: 14,
+  },
+
+  /* COMPLETED */
+  categoryText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 4,
+  },
+
+  timeTextSecondary: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "500",
+    textAlign: "center",
+    includeFontPadding: false,
+    lineHeight: 13,
+  },
+
+  completedIndicator: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "rgba(34,197,94,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  completedDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#22C55E",
   },
 });

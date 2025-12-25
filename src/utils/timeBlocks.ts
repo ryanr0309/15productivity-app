@@ -20,6 +20,61 @@ export type Block = {
   endISO: string;
 };
 
+type BlockState =
+  | "upcoming"
+  | "active"
+  | "completed"
+  | "missed";
+
+export function getBlockState(block: Block, now = Date.now()): BlockState {
+  const start = new Date(block.startISO).getTime();
+  const end = new Date(block.endISO).getTime();
+
+  if (block.completed) return "completed";
+  if (now >= start && now < end) return "active";
+  if (now >= end) return "missed";
+  return "upcoming";
+}
+
+export function getBlockStyles(
+  state: BlockState,
+  categoryColor?: string
+) {
+  // 🎯 CATEGORY COLOR RULE
+  const baseColor = categoryColor ?? "#1E2A4A";
+
+  switch (state) {
+    case "completed":
+      return {
+        backgroundColor: baseColor, // ✅ category color
+        opacity: 1,
+      };
+
+    case "active":
+      return {
+        backgroundColor: baseColor, // ✅ category color
+        outline: "#4DA3FF",
+        opacity: 1,
+      };
+
+    case "missed":
+      return {
+        backgroundColor: baseColor,
+        opacity: 1,
+      };
+
+    case "upcoming":
+    default:
+      return {
+        backgroundColor: "#1E2A4A",
+        opacity: 0.35,
+      };
+  }
+}
+
+
+
+
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);

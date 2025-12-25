@@ -13,22 +13,24 @@ export default function ColorPicker({
   usedColors,
   onSelect,
 }: Props) {
+  // ✅ Filter out used colors entirely
+  const availableColors = CATEGORY_COLORS.filter(
+    (color) => !usedColors.includes(color)
+  );
+
   return (
     <View style={styles.grid}>
-      {CATEGORY_COLORS.map((color) => {
-        const isUsed = usedColors.includes(color);
+      {availableColors.map((color) => {
         const isSelected = selectedColor === color;
 
         return (
           <TouchableOpacity
             key={color}
-            disabled={isUsed && !isSelected}
             onPress={() => onSelect(color)}
             style={[
               styles.color,
               {
                 backgroundColor: color,
-                opacity: isUsed && !isSelected ? 0.3 : 1,
                 borderWidth: isSelected ? 2 : 0,
               },
             ]}
@@ -38,6 +40,7 @@ export default function ColorPicker({
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   grid: {

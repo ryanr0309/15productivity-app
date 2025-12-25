@@ -14,13 +14,17 @@ import { supabase } from "../../lib/supabase"; // adjust path
 import { Alert } from "react-native";
 import { router } from "expo-router";
 
-export default function StartDayScreen({ onStart }: { onStart?: () => void }) {
+
+
+
+export default function StartDayScreen() {
   const [interval, setInterval] = useState<number | null>(30);
   const [goals, setGoals] = useState<string[]>([""]);
   const [sleepTime, setSleepTime] = useState<Date | null>(null);
   const [tempSleepTime, setTempSleepTime] = useState<Date | null>(null);
   const [showPicker, setShowPicker] = useState(false);
 
+  
   function normalizeGoals(goals: string[]) {
   return goals
     .map((g) => g.trim())
@@ -48,23 +52,23 @@ export default function StartDayScreen({ onStart }: { onStart?: () => void }) {
   }
 
   // 0️⃣ Get authenticated user
-const {
-  data: { user },
-  error: userError,
-} = await supabase.auth.getUser();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
-if (userError || !user) {
-  Alert.alert("You must be logged in to start a day.");
-  return;
-}
+  if (userError || !user) {
+    Alert.alert("You must be logged in to start a day.");
+    return;
+  }
 
-// 1️⃣ Insert Day
-const { data: day, error: dayError } = await supabase
-  .from("days")
-  .insert({
-    user_id: user.id,
+  // 1️⃣ Insert Day
+  const { data: day, error: dayError } = await supabase
+    .from("days")
+    .insert({
+      user_id: user.id,
       status: "open",
-      start_time: new Date().toISOString(), // server will normalize
+      start_time: new Date().toISOString(),
       interval_minutes: interval,
       estimated_sleep_time: sleepTime
         ? sleepTime.toISOString()
@@ -96,9 +100,16 @@ const { data: day, error: dayError } = await supabase
     return;
   }
 
-  // 3️⃣ Success → navigate home
-  router.replace("/"); // or however you go back to Home
+
+  // 4️⃣ Navigate home
+  router.replace({
+  pathname: "/",
+  params: { refresh: "true" },
+});
+
 }
+
+
 
   return (
     <LinearGradient colors={["#0B132B", "#1C2541"]} style={styles.container}>

@@ -5,6 +5,9 @@ import {
   StyleSheet,
   Pressable,
   TextInput,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
 } from "react-native";
 import { colors } from "../../constants/colors";
 import { Category } from "../../constants/categories";
@@ -13,37 +16,29 @@ import AddCategoryModal from "../categories/AddCategoryModal";
 
 
 type Props = {
-  /** Identity */
-  dayId: string;
-  blockIndex: number;
-
-  /** Display */
+  blockId: string;                 // ✅ stable identity
   timeRange: string;
   dateLabel: string;
 
-  /** Initial values (for edit mode) */
   initialCategoryId: string | null;
   initialDescription: string;
 
-  /** Categories */
   categories: Category[];
   onAddCategory: (category: Category) => void;
   onDeleteCategory: (categoryId: string) => void;
 
-  /** Save handler */
   onSave: (data: {
-    dayId: string;
-    blockIndex: number;
-    categoryId: string | null;
+    blockId: string;
+    categoryId: string;
     description: string;
   }) => void;
 
-  onClose: () => void; // ✅ ADD THIS
+  onClose: () => void;
 };
 
+
 export default function TimeBlockModal({
-  dayId,
-  blockIndex,
+  blockId,
   timeRange,
   dateLabel,
   initialCategoryId,
@@ -65,29 +60,48 @@ export default function TimeBlockModal({
     Boolean(initialCategoryId) || initialDescription.trim().length > 0;
 
   const canSave =
-    selectedCategoryId !== null || description.trim().length > 0;
+  selectedCategoryId !== null &&
+  description.trim().length > 0;
+
 
   useEffect(() => {
     setSelectedCategoryId(initialCategoryId);
     setDescription(initialDescription);
   }, [initialCategoryId, initialDescription]);
 
-  function handleSave() {
-  if (!canSave) return;
+function handleSave() {
+  if (!selectedCategoryId) return;
 
   onSave({
-    dayId,
-    blockIndex,
+    blockId,
     categoryId: selectedCategoryId,
     description,
   });
 
-  onClose(); // ✅ CLOSE MODAL
+  onClose();
+}
+
+function handleDeleteCategoryLocal(categoryId: string) {
+  // 🔑 Clear local selection first
+  if (selectedCategoryId === categoryId) {
+    setSelectedCategoryId(null);
+  }
+
+  // 🔑 Then call parent deletion
+  onDeleteCategory(categoryId);
 }
 
 
+
   return (
-    <View style={styles.sheetContainer}>
+    <KeyboardAvoidingView
+  behavior={Platform.OS === "ios" ? "padding" : "height"}
+>
+  <ScrollView
+  contentContainerStyle={styles.sheetContainer}
+  keyboardShouldPersistTaps="handled"
+>
+
       <View style={styles.handle} />
 
       <Text style={styles.time}>{timeRange}</Text>
@@ -103,7 +117,7 @@ export default function TimeBlockModal({
             category={category}
             selected={category.id === selectedCategoryId}
             onPress={() => setSelectedCategoryId(category.id)}
-            onDelete={() => onDeleteCategory(category.id)}
+            onDelete={() => handleDeleteCategoryLocal(category.id)}
           />
         ))}
 
@@ -155,7 +169,8 @@ export default function TimeBlockModal({
           setIsAddCategoryOpen(false);
         }}
       />
-    </View>
+    </ScrollView>
+  </KeyboardAvoidingView> 
   );
 }
 const styles = StyleSheet.create({
@@ -182,10 +197,14 @@ const styles = StyleSheet.create({
     color: "#000",
   },
   sheetContainer: {
-    height: 100,
-    paddingHorizontal: 20,
-    paddingTop: 8,
-  },
+  borderRadius: 20,
+  paddingHorizontal: 16,
+  paddingTop: 12,
+  paddingBottom: 12, // 🔽 REDUCED from large value
+  maxHeight: "85%",
+},
+
+
 
   date: {
     fontSize: 14,
@@ -246,6 +265,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: "center",
     marginTop: 20,
+    marginBottom: 60,
   },
 
   saveButtonDisabled: {

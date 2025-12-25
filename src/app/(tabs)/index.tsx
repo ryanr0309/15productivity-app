@@ -13,6 +13,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { supabase } from "../../lib/supabase";
 import Modal from "react-native-modal";
+import { useLocalSearchParams } from "expo-router";
+
 
 import { formatTime } from "../../utils/time";
 import {
@@ -20,7 +22,8 @@ import {
   getCurrentBlockIndex
 } from "../../utils/blocks";
 import { normalizeToInterval } from "../../utils/time";
-
+import { useFocusEffect } from "expo-router";
+import { useCallback } from "react";
 import TimeBlockCard from "../../components/time-block/TimeBlockCard";
 import TimeBlockModal from "../../components/time-block/TimeBlockModal";
 import { Block } from "../../utils/timeBlocks";
@@ -29,6 +32,8 @@ import { Category } from "../../constants/categories";
 import { User } from "@supabase/supabase-js";
 import { deleteCategory, fetchCategories } from "../../services/categories";
 import { useAuthStore } from "../../store/useAuthStore";
+import SleepModal from "../../components/home/sleepModal";
+import { closeOpenDay } from "../../lib/days";
 
 /* ===================================================== */
 
@@ -36,6 +41,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [openDay, setOpenDay] = useState<any | null>(null);
   const [blocks, setBlocks] = useState<Block[]>([]);
+  const [isSleepModalOpen, setIsSleepModalOpen] = useState(false);
+  const MIN_AWAKE_HOURS = 6;
 
 
   const [activeBlockIndex, setActiveBlockIndex] = useState<number | null>(null);
@@ -43,13 +50,38 @@ export default function Home() {
   const [categories, setCategories] = useState<Category[]>([]);
   const authUser = useAuthStore((s) => s.user);
 
+  const wakeTime = openDay
+  ? new Date(openDay.start_time)
+  : null;
+
+const earliestSleepTime = wakeTime
+  ? getEarliestSleepTime(wakeTime)
+  : null;
+
+const now = new Date();
+
+const canLogSleep =
+  earliestSleepTime ? now >= earliestSleepTime : false;
+
+const remainingMs =
+  earliestSleepTime
+    ? Math.max(earliestSleepTime.getTime() - now.getTime(), 0)
+    : 0;
+
 
   const heroBlock = openDay ? getCurrentBlock(blocks) : null;
   const dayId = openDay?.id ?? null;
 
+  const { refresh } = useLocalSearchParams();
+
+  function getEarliestSleepTime(wakeTime: Date) {
+  return new Date(wakeTime.getTime() + MIN_AWAKE_HOURS * 60 * 60 * 1000);
+}
+
   function handleAddCategory(category: Category) {
   setCategories(prev => [...prev, category]);
 }
+
 
 async function handleDeleteCategory(categoryId: string) {
   // 1️⃣ Optimistic UI update
@@ -89,6 +121,14 @@ useEffect(() => {
 
 
 
+useFocusEffect(
+  useCallback(() => {
+    console.log("HOME FOCUSED → REFRESHING DAY");
+    refreshDay();
+  }, [])
+);
+
+
 
   useEffect(() => {
     async function loadOpenDay() {
@@ -115,6 +155,8 @@ useEffect(() => {
   }, []);
 
   /* ================= LOAD BLOCKS ================= */
+
+
 
   useEffect(() => {
   console.log(
@@ -143,6 +185,89 @@ useEffect(() => {
   }, [openDay]);
 
   /* ================= HELPERS ================= */
+
+  function formatRemaining(ms: number) {
+  const totalMinutes = Math.ceil(ms / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
+}
+
+
+  async function refreshDay() {
+    console.log("REFRESH DAY CALLED");
+  setLoading(true);
+
+  // clear stale UI
+  setOpenDay(null);
+  setBlocks([]);
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    setLoading(false);
+    return;
+  }
+
+  const { data: openDay } = await supabase
+    .from("days")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("status", "open")
+    .maybeSingle();
+
+  if (!openDay) {
+    setLoading(false);
+    return;
+  }
+
+  console.log("OPEN DAY QUERY RESULT:", openDay);
+  console.log("USER IN REFRESH:", user?.id);
+
+
+
+  const { data: blocks } = await supabase
+    .from("time_blocks")
+    .select("*")
+    .eq("day_id", openDay.id)
+    .order("start_time");
+
+  setOpenDay(openDay);
+  setBlocks(blocks ?? []);
+  setLoading(false);
+}
+
+
+
+  async function handleConfirmSleep(sleepTime: Date) {
+  if (!authUser) return;
+
+  try {
+    // 1️⃣ Persist + close
+    await closeOpenDay({
+      userId: authUser.id,
+      sleepTime,
+    });
+
+    // 2️⃣ Close modal
+    setIsSleepModalOpen(false);
+
+    // 3️⃣ Refresh local state
+    await refreshDay();
+
+    // (Optional next step)
+    // navigate to Day Complete screen
+
+  } catch (err) {
+    console.error("Failed to log sleep", err);
+  }
+}
 
   function handleOpenBlock(blockIndex: number) {
     setActiveBlockIndex(blockIndex);
@@ -225,44 +350,45 @@ useEffect(() => {
 
 
 
-
-  async function handleSaveTimeBlock({
-    dayId,
-    blockIndex,
-    categoryId,
-    description,
-  }: {
-    dayId: string;
-    blockIndex: number;
-    categoryId: string | null;
-    description: string;
-  }) {
-    // Optimistic update
-    setBlocks((prev) => {
-      const copy = [...prev];
-      copy[blockIndex] = {
-  ...copy[blockIndex],
+async function handleSaveTimeBlock({
+  blockId,
   categoryId,
   description,
-  completed: true,
-};
+}: {
 
-      return copy;
-    });
+  blockId: string;
+  categoryId: string | null;
+  description: string;
+}) {
+  // 1️⃣ Optimistic UI update (ID-based)
+  setBlocks(prev =>
+    prev.map(block =>
+      block.id === blockId
+        ? {
+            ...block,
+            categoryId,
+            description,
+            completed: true,
+          }
+        : block
+    )
+  );
 
-    await supabase
-  .from("time_blocks")
-  .update({
-    category_id: categoryId,
-    description,
-    status: "logged",
-  })
-  .eq("id", blocks[blockIndex].id);
+  // 2️⃣ Persist to Supabase (same ID)
+  await supabase
+    .from("time_blocks")
+    .update({
+      category_id: categoryId,
+      description,
+      status: "logged",
+    })
+    .eq("id", blockId);
 
+  // 3️⃣ Close modal
+  setIsTimeBlockModalOpen(false);
+  setActiveBlockIndex(null);
+}
 
-    setIsTimeBlockModalOpen(false);
-    setActiveBlockIndex(null);
-  }
 
 
   const activeBlock =
@@ -352,20 +478,54 @@ useEffect(() => {
         </View>
 
         {/* LOG SLEEP */}
-        <TouchableOpacity style={styles.sleepButton}>
-          <Ionicons name="moon-outline" size={18} color="#FFFFFF" />
-          <Text style={styles.sleepText}>Log Sleep</Text>
-        </TouchableOpacity>
+
+
+        <Pressable
+  style={[
+    styles.sleepButton,
+    !canLogSleep && { opacity: 0.4 },
+  ]}
+  disabled={!canLogSleep}
+  onPress={() => setIsSleepModalOpen(true)}
+>
+  <Text style={styles.sleepText}>Log Sleep 🌙</Text>
+
+  {!canLogSleep && earliestSleepTime && (
+    <Text
+      style={{
+        color: "#B0B8D4",
+        fontSize: 12,
+        marginTop: 4,
+      }}
+    >
+      Available in {formatRemaining(remainingMs)}
+    </Text>
+  )}
+</Pressable>
+
 
             {/* GRID */}
             <View style={styles.grid}>
-  {blocks.map((block, index) => (
+  {blocks.map((block, index) => {
+
+ const category = categories.find(
+      c => c.id === block.categoryId
+    );
+
+     console.log("MATCH ATTEMPT:", {
+      blockCategoryId: block.categoryId,
+      categoryIds: categories.map(c => c.id),
+    });
+  
+  return (
+    
     <TimeBlockCard
       key={block.id}
       block={block}
       onPress={() => handleOpenBlock(index)}
+      category={category}
     />
-  ))}
+  )})}
 </View>
 
 
@@ -394,11 +554,11 @@ useEffect(() => {
     backdropOpacity={0.5}
     style={styles.modalContainer}
     propagateSwipe // 👈 IMPORTANT if modal scrolls
+    avoidKeyboard
   >
     <View style={styles.modalContent}>
   <TimeBlockModal
-    dayId={openDay.id}
-    blockIndex={activeBlockIndex as number}
+    blockId={activeBlock.id}
     timeRange={activeBlock.timeLabel}
     dateLabel={new Date().toDateString()}
     initialCategoryId={activeBlock.categoryId}
@@ -414,12 +574,23 @@ useEffect(() => {
   />
   </View>
   </Modal>
+
+  
 )}
-
-
+{openDay && (
+<SleepModal
+  wakeTime={new Date(openDay.start_time)}  
+  visible={isSleepModalOpen}
+  onClose={() => {
+      setIsSleepModalOpen(false);
+      setActiveBlockIndex(null);
+    }}
+  onHidden={() => setIsSleepModalOpen(false)} // 👈 FORCE RELEASE
+  onConfirm={handleConfirmSleep}
+/>
+)}
     </LinearGradient>
-  );
-}
+)}
 
 function ContextPill({
   label,
@@ -435,6 +606,7 @@ function ContextPill({
     </View>
   );
 }
+
 
 
 /* ================= STYLES ================= */
@@ -495,7 +667,7 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
   justifyContent: "flex-end",
-  margin: 0,
+  margin: 0, // 🚨 REQUIRED for keyboard to work
 },
 
 modalContent: {
@@ -506,6 +678,13 @@ modalContent: {
   minHeight: 450,
 },
 
+modalContentSleep: {
+  backgroundColor: "#1E2A4A",
+  borderTopLeftRadius: 20,
+  borderTopRightRadius: 20,
+  padding: 10,
+  minHeight: 300,
+},
 
   contextRow: {
     flexDirection: "row",

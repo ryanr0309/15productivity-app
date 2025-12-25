@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import {
-  Modal,
   View,
   Text,
   TextInput,
@@ -12,6 +11,8 @@ import ColorPicker from "../../components/ColorPicker";
 import { Category } from "../../constants/categories";
 import { addCategory } from "../../services/categories";
 import { useAuthStore } from "../../store/useAuthStore";
+import Modal from "react-native-modal";
+
 
 
 type Props = {
@@ -63,10 +64,11 @@ const handleSave = async () => {
 
   return (
     <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-    >
+  isVisible={visible}
+  onBackdropPress={onClose}
+  onBackButtonPress={onClose}
+  style={{ margin: 0, justifyContent: "center" }}
+>
       <View style={styles.overlay}>
         <View style={styles.container}>
           {/* Header */}
