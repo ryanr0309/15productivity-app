@@ -50,6 +50,8 @@ export default function TimeBlockModal({
   onClose, // ✅ ADD THIS
 }: Props) {
 
+  const MIN_DESCRIPTION_LENGTH = 8;
+  const MAX_DESCRIPTION_LENGTH = 160;
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
     null
   );
@@ -59,9 +61,13 @@ export default function TimeBlockModal({
   const isEditing =
     Boolean(initialCategoryId) || initialDescription.trim().length > 0;
 
+  const trimmedDescription = description.trim();
+
   const canSave =
   selectedCategoryId !== null &&
-  description.trim().length > 0;
+  trimmedDescription.length >= MIN_DESCRIPTION_LENGTH &&
+  trimmedDescription.length <= MAX_DESCRIPTION_LENGTH;
+
 
 
   useEffect(() => {
@@ -133,17 +139,26 @@ function handleDeleteCategoryLocal(categoryId: string) {
       <Text style={styles.sectionTitle}>Task Description</Text>
 
       <TextInput
-        value={description}
-        onChangeText={setDescription}
-        placeholder="What did you work on?"
-        placeholderTextColor={colors.textSecondary}
-        style={styles.input}
-        multiline
-      />
+  value={description}
+  onChangeText={setDescription}
+  placeholder="What did you work on?"
+  placeholderTextColor={colors.textSecondary}
+  style={styles.input}
+  multiline
+  maxLength={MAX_DESCRIPTION_LENGTH}
+/>
+
 
       <Text style={styles.helper}>
-        Meaningful descriptions = better insights later
-      </Text>
+  {trimmedDescription.length === 0
+    ? "Be specific — this helps your daily insights."
+    : trimmedDescription.length < MIN_DESCRIPTION_LENGTH
+    ? `Add ${MIN_DESCRIPTION_LENGTH - trimmedDescription.length} more characters`
+    : trimmedDescription.length > MAX_DESCRIPTION_LENGTH
+    ? "Description is too long"
+    : "Edits won’t affect your productivity score"}
+</Text>
+
 
       {/* SAVE BUTTON */}
       <Pressable

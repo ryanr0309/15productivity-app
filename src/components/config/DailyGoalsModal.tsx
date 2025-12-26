@@ -1,78 +1,47 @@
-import { View, Text, StyleSheet, Pressable, TextInput } from "react-native";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import { colors } from "../../constants/colors";
-import React, { useState, useEffect } from "react";
+import React from "react";
 
 type Props = {
-  initialGoals: string[];
-  onSave: (goals: string[]) => void;
+  goals: string[];
+  onClose: () => void;
 };
 
-export default function DailyGoalsModal({
-  initialGoals,
-  onSave,
-}: Props) {
-  const [goals, setGoals] = useState<string[]>([]);
-
-  useEffect(() => {
-    setGoals(initialGoals);
-  }, [initialGoals]);
-
-  function updateGoal(text: string, index: number) {
-    const updated = [...goals];
-    updated[index] = text;
-    setGoals(updated);
-  }
-
-  function removeGoal(index: number) {
-    setGoals(goals.filter((_, i) => i !== index));
-  }
-
-  function addGoal() {
-    if (goals.length < 3) {
-      setGoals([...goals, ""]);
-    }
-  }
-
+export default function DailyGoalsModal({ goals, onClose }: Props) {
   return (
     <View style={styles.sheet}>
       <View style={styles.handle} />
 
-      <Text style={styles.title}>Daily Goals</Text>
+      <Text style={styles.title}>Today’s Goals</Text>
       <Text style={styles.subtitle}>
-        Pick up to 3 things that matter most today
+        These are locked in for today
       </Text>
 
-      {goals.map((goal, index) => (
-        <View key={index} style={styles.goalRow}>
-          <TextInput
-            value={goal}
-            onChangeText={(text) => updateGoal(text, index)}
-            placeholder={`Goal #${index + 1}`}
-            style={styles.input}
-          />
+      <View style={styles.goalsContainer}>
+        {goals.length === 0 ? (
+          <Text style={styles.empty}>
+            No goals were set for today
+          </Text>
+        ) : (
+          goals.map((goal, index) => (
+            <View key={index} style={styles.goalRow}>
+              <View style={styles.bullet} />
+              <Text style={styles.goalText}>{goal}</Text>
+            </View>
+          ))
+        )}
+      </View>
 
-          <Pressable onPress={() => removeGoal(index)}>
-            <Text style={styles.delete}>🗑️</Text>
-          </Pressable>
-        </View>
-      ))}
+      <Text style={styles.helper}>
+        Goals help guide your focus, but don’t affect your productivity score.
+      </Text>
 
-      {goals.length < 3 && (
-        <Pressable onPress={addGoal} style={styles.addRow}>
-          <Text style={styles.add}>＋ Add Goal</Text>
-        </Pressable>
-      )}
-
-      <Pressable
-        style={styles.saveButton}
-        onPress={() => onSave(goals.filter(g => g.trim() !== ""))}
-      >
-        <Text style={styles.saveText}>Save</Text>
+      <Pressable onPress={onClose} style={styles.closeButton}>
+        <Text style={styles.closeText}>Close</Text>
       </Pressable>
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   sheet: {
     backgroundColor: "#F7F7F7",
@@ -93,56 +62,66 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: "700",
-    marginBottom: 6,
     textAlign: "center",
+    marginBottom: 4,
   },
 
   subtitle: {
     fontSize: 13,
     color: "#666",
-    marginBottom: 16,
     textAlign: "center",
+    marginBottom: 20,
+  },
+
+  goalsContainer: {
+    gap: 12,
+    marginBottom: 20,
   },
 
   goalRow: {
     flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-    gap: 8,
-  },
-
-  input: {
-    flex: 1,
+    alignItems: "flex-start",
+    gap: 10,
     backgroundColor: "#FFF",
-    borderRadius: 10,
-    padding: 12,
+    padding: 14,
+    borderRadius: 12,
+  },
+
+  bullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.accent,
+    marginTop: 7,
+  },
+
+  goalText: {
+    flex: 1,
+    fontSize: 15,
+    color: "#111",
+  },
+
+  empty: {
+    textAlign: "center",
+    color: "#888",
     fontSize: 14,
   },
 
-  delete: {
-    fontSize: 18,
+  helper: {
+    fontSize: 12,
+    color: "#888",
+    textAlign: "center",
+    marginBottom: 16,
   },
 
-  addRow: {
-    marginBottom: 20,
-  },
-
-  add: {
-    color: colors.accent,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
-  saveButton: {
-    backgroundColor: "#18C964",
-    borderRadius: 16,
-    paddingVertical: 14,
+  closeButton: {
     alignItems: "center",
+    paddingVertical: 14,
   },
 
-  saveText: {
-    color: "#FFF",
-    fontWeight: "700",
+  closeText: {
+    color: colors.accent,
     fontSize: 16,
+    fontWeight: "600",
   },
 });

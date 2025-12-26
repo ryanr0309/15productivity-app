@@ -14,6 +14,7 @@ import { router } from "expo-router";
 import { supabase } from "../../lib/supabase";
 import Modal from "react-native-modal";
 import { useLocalSearchParams } from "expo-router";
+import CooldownScreen from "../../components/home/cooldown";
 
 
 import { formatTime } from "../../utils/time";
@@ -34,6 +35,8 @@ import { deleteCategory, fetchCategories } from "../../services/categories";
 import { useAuthStore } from "../../store/useAuthStore";
 import SleepModal from "../../components/home/sleepModal";
 import { closeOpenDay } from "../../lib/days";
+import StartDayScreen from "../../components/home/startday";
+import DailyGoalsModal from "../../components/config/DailyGoalsModal";
 
 /* ===================================================== */
 
@@ -44,11 +47,15 @@ export default function Home() {
   const [isSleepModalOpen, setIsSleepModalOpen] = useState(false);
   const MIN_AWAKE_HOURS = 6;
 
-
+ const [isGoalsModalOpen, setIsGoalsModalOpen] = useState(false);
   const [activeBlockIndex, setActiveBlockIndex] = useState<number | null>(null);
   const [isTimeBlockModalOpen, setIsTimeBlockModalOpen] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const authUser = useAuthStore((s) => s.user);
+  const [openDayChecked, setOpenDayChecked] = useState(false);
+  const [cooldownChecked, setCooldownChecked] = useState(false);  
+  const homeReady = openDayChecked && cooldownChecked;
+
 
   const wakeTime = openDay
   ? new Date(openDay.start_time)
@@ -68,9 +75,14 @@ const remainingMs =
     ? Math.max(earliestSleepTime.getTime() - now.getTime(), 0)
     : 0;
 
+const COOLDOWN_HOURS = 4;
+
+
+
 
   const heroBlock = openDay ? getCurrentBlock(blocks) : null;
   const dayId = openDay?.id ?? null;
+  const dailyGoals: string[] = openDay?.goals ?? [];
 
   const { refresh } = useLocalSearchParams();
 
@@ -102,22 +114,27 @@ async function handleDeleteCategory(categoryId: string) {
   /* ================= LOAD OPEN DAY ================= */
 
 
-
 useEffect(() => {
-  if (!authUser?.id) return;
-
   async function loadCategories() {
-    if (!authUser) return;
+    const { data: auth } = await supabase.auth.getUser();
+
+    if (!auth?.user) {
+      setCategories([]);
+      return;
+    }
+
     try {
-      const data = await fetchCategories(authUser.id);
+      const data = await fetchCategories(auth.user.id);
       setCategories(data ?? []);
     } catch (err) {
       console.error("Failed to fetch categories", err);
+      setCategories([]);
     }
   }
 
   loadCategories();
-}, [authUser?.id]);
+}, []);
+
 
 
 
@@ -129,32 +146,97 @@ useFocusEffect(
 );
 
 
+async function loadOpenDay() {
+  try {
+    setLoading(true);
+
+    const { data: auth } = await supabase.auth.getUser();
+
+    // 🔑 If no user, we now KNOW there is no open day
+    if (!auth?.user) {
+      setOpenDay(null);
+      setOpenDayChecked(true);
+      return;
+    }
+
+    const { data } = await supabase
+      .from("days")
+      .select("*")
+      .eq("user_id", auth.user.id)
+      .eq("status", "open")
+      .maybeSingle();
+
+    // 🔑 Open day is now definitively known (exists or not)
+    setOpenDay(data ?? null);
+    setOpenDayChecked(true);
+  } catch (err) {
+    console.error("Failed to load open day", err);
+
+    // 🔑 Even on error, we must unblock rendering
+    setOpenDay(null);
+    setOpenDayChecked(true);
+  } finally {
+    setLoading(false);
+  }
+}
+
 
   useEffect(() => {
-    async function loadOpenDay() {
-      setLoading(true);
-
-      const { data: auth } = await supabase.auth.getUser();
-      if (!auth?.user) {
-        setLoading(false);
-        return;
-      }
-
-      const { data } = await supabase
-        .from("days")
-        .select("*")
-        .eq("user_id", auth.user.id)
-        .eq("status", "open")
-        .maybeSingle();
-
-      setOpenDay(data ?? null);
-      setLoading(false);
-    }
+    
 
     loadOpenDay();
   }, []);
 
   /* ================= LOAD BLOCKS ================= */
+  const [cooldownEnd, setCooldownEnd] = useState<Date | null>(null);
+
+  async function loadCooldown() {
+    console.log("COOLDOWN EFFECT RUNNING");
+
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth?.user) {
+      console.log("COOLDOWN: NO AUTH USER");
+      return;
+    }
+
+    console.log("COOLDOWN USER READY:", auth.user.id);
+
+    const { data: day } = await supabase
+      .from("days")
+      .select("end_time")
+      .eq("user_id", auth.user.id)
+      .not("end_time", "is", null)
+      .order("end_time", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    console.log("COOLDOWN QUERY RESULT:", day);
+
+    if (!day?.end_time) {
+      setCooldownEnd(null);
+      return;
+    }
+
+    const end = new Date(day.end_time);
+    const unlockMs =
+      end.getTime() + COOLDOWN_HOURS * 60 * 60 * 1000;
+
+    if (Date.now() < unlockMs) {
+      setCooldownEnd(new Date(unlockMs));
+    } else {
+      setCooldownEnd(null);
+    }
+
+    setCooldownChecked(true);
+
+  }
+
+useEffect(() => {
+
+
+  loadCooldown();
+}, []);
+
 
 
 
@@ -245,29 +327,32 @@ useFocusEffect(
 
 
 
-  async function handleConfirmSleep(sleepTime: Date) {
-  if (!authUser) return;
+async function handleConfirmSleep(sleepTime: Date) {
+  console.log("HANDLE CONFIRM SLEEP FIRED", sleepTime);
+
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth?.user) {
+    console.log("NO AUTH USER");
+    return;
+  }
 
   try {
-    // 1️⃣ Persist + close
     await closeOpenDay({
-      userId: authUser.id,
+      userId: auth.user.id,
       sleepTime,
     });
 
-    // 2️⃣ Close modal
     setIsSleepModalOpen(false);
 
-    // 3️⃣ Refresh local state
     await refreshDay();
-
-    // (Optional next step)
-    // navigate to Day Complete screen
+    await loadCooldown(); // 🔑 REQUIRED
 
   } catch (err) {
     console.error("Failed to log sleep", err);
   }
 }
+
+
 
   function handleOpenBlock(blockIndex: number) {
     setActiveBlockIndex(blockIndex);
@@ -396,6 +481,35 @@ async function handleSaveTimeBlock({
 
   /* ================= RENDER ================= */
 
+  if (!homeReady) {
+  return null;
+}
+
+  if (cooldownEnd) {
+  return (
+    <CooldownScreen
+      unlockTime={cooldownEnd}
+      onFinished={async () => {
+        setCooldownEnd(null);
+        await loadOpenDay(); // 🔑 this is critical
+      }}
+    />
+  );
+}
+
+
+if (!openDay) {
+  return (
+    <StartDayScreen
+      onStarted={async () => {
+        await refreshDay(); // sets openDay
+      }}
+    />
+  );
+}
+
+
+
   return (
     <LinearGradient colors={["#0B132B", "#1C2541"]} style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -438,6 +552,7 @@ async function handleSaveTimeBlock({
   <ContextPill
     label="Goals 🎯"
     value={openDay ? "View" : "—"}
+    onPress={()=>setIsGoalsModalOpen(true)}
   />
   <ContextPill
     label="Sleep 😴"
@@ -589,21 +704,31 @@ async function handleSaveTimeBlock({
   onConfirm={handleConfirmSleep}
 />
 )}
+
+{isGoalsModalOpen && (
+  <DailyGoalsModal
+    goals={dailyGoals}
+    onClose={() => setIsGoalsModalOpen(false)}
+  />
+)}
+
     </LinearGradient>
 )}
 
 function ContextPill({
   label,
   value,
+  onPress
 }: {
   label: string;
   value: string;
+  onPress?: () => void;
 }) {
   return (
-    <View style={styles.contextPill}>
+    <Pressable style={styles.contextPill} onPress={onPress}>
       <Text style={styles.contextLabel}>{label}</Text>
       <Text style={styles.contextValue}>{value}</Text>
-    </View>
+    </Pressable>
   );
 }
 

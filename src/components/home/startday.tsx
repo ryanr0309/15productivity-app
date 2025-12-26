@@ -15,14 +15,20 @@ import { Alert } from "react-native";
 import { router } from "expo-router";
 
 
+type Props = {
+  onStarted?: () => void;
+};
 
 
-export default function StartDayScreen() {
+
+export default function StartDayScreen({ onStarted }: Props){
   const [interval, setInterval] = useState<number | null>(30);
   const [goals, setGoals] = useState<string[]>([""]);
   const [sleepTime, setSleepTime] = useState<Date | null>(null);
   const [tempSleepTime, setTempSleepTime] = useState<Date | null>(null);
   const [showPicker, setShowPicker] = useState(false);
+  const hasSleepTime = sleepTime !== null;
+
 
   
   function normalizeGoals(goals: string[]) {
@@ -102,10 +108,8 @@ export default function StartDayScreen() {
 
 
   // 4️⃣ Navigate home
-  router.replace({
-  pathname: "/",
-  params: { refresh: "true" },
-});
+  onStarted?.();
+
 
 }
 
@@ -206,6 +210,10 @@ export default function StartDayScreen() {
         {/* ESTIMATED SLEEP (OPTIONAL) */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Estimated Sleep</Text>
+<Text style={styles.sectionHint}>
+  Required to accurately start your day.
+</Text>
+
 
           <TouchableOpacity
             style={styles.sleepCard}
@@ -232,9 +240,9 @@ export default function StartDayScreen() {
         <TouchableOpacity
   style={[
     styles.startButton,
-    (!interval || !hasAtLeastOneGoal) && { opacity: 0.5 },
+    (!interval || !hasAtLeastOneGoal || !hasSleepTime) && { opacity: 0.5 },
   ]}
-  disabled={!interval || !hasAtLeastOneGoal}
+  disabled={!interval || !hasAtLeastOneGoal || !hasSleepTime}
   onPress={handleStartDay}
 >
   <Text style={styles.startButtonText}>Start Day</Text>

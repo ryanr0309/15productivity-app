@@ -12,32 +12,50 @@ export default function Index() {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<any | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [latestDay, setLatestDay] = useState<any | null>(null);
+  const COOLDOWN_HOURS = 4;
+
 
   useEffect(() => {
     const load = async () => {
-      // 1️⃣ Get session
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
-      setSession(session);
+  setSession(session);
 
-      // 2️⃣ Fetch profile if logged in
-      if (session?.user) {
-        const { data } = await supabase
-          .from("users")
-          .select("onboarding_completed")
-          .eq("id", session.user.id)
-          .single();
+  let onboardingCompleted = false;
 
-        setProfile(data);
-      }
+  if (session?.user) {
+    const { data: profileData } = await supabase
+      .from("users")
+      .select("onboarding_completed")
+      .eq("id", session.user.id)
+      .single();
 
-      setLoading(false);
-      console.log("SESSION:", session);
-        console.log("PROFILE:", profile);
+    setProfile(profileData);
+    onboardingCompleted = profileData?.onboarding_completed === true;
+  }
 
-    };
+  // ⏳ cooldown check data
+  if (session?.user && onboardingCompleted) {
+   const { data: day } = await supabase
+  .from("days")
+  .select("status, end_time")
+  .eq("user_id", session.user.id)
+  .not("end_time", "is", null)
+  .order("end_time", { ascending: false })
+  .limit(1)
+  .maybeSingle();
+
+setLatestDay(day ?? null);
+
+
+  }
+
+  setLoading(false);
+};
+
 
     load();
   }, []);
@@ -59,6 +77,11 @@ export default function Index() {
   if (!profile || profile.onboarding_completed !== true) {
   return <Redirect href="/(onboarding)" />;
 }
+
+
+
+
+
 
 
   // ✅ Logged in + onboarding done

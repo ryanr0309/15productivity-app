@@ -170,7 +170,11 @@ const canSleepNow = new Date() >= earliestSleepTime;
     !canSleepNow && styles.disabledButton,
   ]}
   disabled={!canSleepNow}
-  onPress={() => onConfirm(new Date())}
+  onPress={() => {
+  onConfirm(new Date());
+  onClose();
+}}
+
 >
   <Text style={styles.primaryText}>
     Sleep now
