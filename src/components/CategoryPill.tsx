@@ -16,6 +16,7 @@ export default function CategoryPill({
   onPress,
   onDelete,
 }: Props) {
+  console.log("CATEGORY PILL RENDER:", category);
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -34,7 +35,7 @@ export default function CategoryPill({
       />
 
       {/* Name */}
-      <Text style={styles.text}>{category.name}</Text>
+      <Text style={styles.text}>{category.label}</Text>
 
       {/* Delete (only if provided) */}
       {onDelete && (

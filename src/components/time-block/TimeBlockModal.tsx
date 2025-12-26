@@ -58,10 +58,14 @@ export default function TimeBlockModal({
   const [description, setDescription] = useState("");
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
 
-  const isEditing =
-    Boolean(initialCategoryId) || initialDescription.trim().length > 0;
+  const safeInitialDescription = (initialDescription ?? "");
 
-  const trimmedDescription = description.trim();
+  const isEditing =
+  Boolean(initialCategoryId) || safeInitialDescription.trim().length > 0;
+
+
+  const trimmedDescription = (description ?? "").trim();
+
 
   const canSave =
   selectedCategoryId !== null &&
@@ -70,10 +74,11 @@ export default function TimeBlockModal({
 
 
 
-  useEffect(() => {
-    setSelectedCategoryId(initialCategoryId);
-    setDescription(initialDescription);
-  }, [initialCategoryId, initialDescription]);
+useEffect(() => {
+  setSelectedCategoryId(initialCategoryId);
+  setDescription(safeInitialDescription);
+}, [initialCategoryId, safeInitialDescription]);
+
 
 function handleSave() {
   if (!selectedCategoryId) return;
@@ -176,14 +181,16 @@ function handleDeleteCategoryLocal(categoryId: string) {
 
       {/* ADD CATEGORY MODAL */}
       <AddCategoryModal
-        visible={isAddCategoryOpen}
-        onClose={() => setIsAddCategoryOpen(false)}
-        categories={categories}
-        onCreate={(category) => {
-          onAddCategory(category);
-          setIsAddCategoryOpen(false);
-        }}
-      />
+  visible={isAddCategoryOpen}
+  onClose={() => setIsAddCategoryOpen(false)}
+  categories={categories}
+  onCreate={(category) => {
+    console.log("ON CREATE FIRED", category);
+    onAddCategory(category);
+    setIsAddCategoryOpen(false);
+  }}
+/>
+
     </ScrollView>
   </KeyboardAvoidingView> 
   );

@@ -14,6 +14,8 @@ export default function TimeBlockCard({ block, category, onPress }: Props) {
   const state = getBlockState(block);
   const stylesForState = getBlockStyles(state, category?.color);
 
+   const isDisabled = state === "upcoming"; // 👈 ADD THIS
+
   const displayTime =
   typeof block.timeLabel === "string"
     ? block.timeLabel.split("–")[0].trim()
@@ -25,6 +27,7 @@ export default function TimeBlockCard({ block, category, onPress }: Props) {
   
   return (
     <Pressable
+     disabled={isDisabled} 
       onPress={onPress}
       style={[
         styles.card,
@@ -34,6 +37,7 @@ export default function TimeBlockCard({ block, category, onPress }: Props) {
           borderColor: stylesForState.outline,
         },
         { opacity: stylesForState.opacity },
+         { opacity: isDisabled ? 0.35 : stylesForState.opacity }
       ]}
     >
       {/* COMPLETED BLOCK */}
@@ -45,7 +49,7 @@ export default function TimeBlockCard({ block, category, onPress }: Props) {
             numberOfLines={1}
             ellipsizeMode="tail"
           >
-            {category?.name ?? "Completed"}
+            {category?.label ?? "Completed"}
           </Text>
 
           {/* TIME (SECONDARY) */}

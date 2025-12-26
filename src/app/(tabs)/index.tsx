@@ -37,6 +37,7 @@ import SleepModal from "../../components/home/sleepModal";
 import { closeOpenDay } from "../../lib/days";
 import StartDayScreen from "../../components/home/startday";
 import DailyGoalsModal from "../../components/config/DailyGoalsModal";
+import HomeSkeleton from "../../components/home/HomeSkeleton"
 
 /* ===================================================== */
 
@@ -54,6 +55,8 @@ export default function Home() {
   const authUser = useAuthStore((s) => s.user);
   const [openDayChecked, setOpenDayChecked] = useState(false);
   const [cooldownChecked, setCooldownChecked] = useState(false);  
+  const [dayReady, setDayReady] = useState(false);
+
   const homeReady = openDayChecked && cooldownChecked;
 
 
@@ -89,10 +92,37 @@ const COOLDOWN_HOURS = 4;
   function getEarliestSleepTime(wakeTime: Date) {
   return new Date(wakeTime.getTime() + MIN_AWAKE_HOURS * 60 * 60 * 1000);
 }
+async function handleAddCategory(category: Category) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  function handleAddCategory(category: Category) {
-  setCategories(prev => [...prev, category]);
+  if (!user) return;
+
+  const { data, error } = await supabase
+    .from("categories")
+    .insert({
+      user_id: user.id,
+      label: category.label, // 🔁 label → name
+      color: category.color,
+    })
+    .select("id, label, color")
+    .single();
+
+  if (error || !data) return;
+
+  setCategories((prev) => [
+    ...prev,
+    {
+      id: data.id,
+      label: data.label,
+      color: data.color,
+    },
+  ]);
 }
+
+
+
 
 
 async function handleDeleteCategory(categoryId: string) {
@@ -125,6 +155,8 @@ useEffect(() => {
 
     try {
       const data = await fetchCategories(auth.user.id);
+      console.log("FETCHED CATEGORIES", data);
+
       setCategories(data ?? []);
     } catch (err) {
       console.error("Failed to fetch categories", err);
@@ -243,7 +275,7 @@ useEffect(() => {
   useEffect(() => {
   console.log(
     "HOME categories state:",
-    categories.map(c => c.name)
+    categories.map(c => c.label)
   );
 }, [categories]);
 
@@ -261,6 +293,7 @@ useEffect(() => {
         .order("start_time", { ascending: true });
 
       setBlocks(normalizeBlocks(data ?? []));
+      setDayReady(true); // 🔑 THIS
     }
 
     loadBlocks();
@@ -285,7 +318,6 @@ useEffect(() => {
   setLoading(true);
 
   // clear stale UI
-  setOpenDay(null);
   setBlocks([]);
 
   const {
@@ -498,15 +530,24 @@ async function handleSaveTimeBlock({
 }
 
 
-if (!openDay) {
+if (!openDay && !loading) {
   return (
     <StartDayScreen
       onStarted={async () => {
-        await refreshDay(); // sets openDay
+        await refreshDay();
       }}
     />
   );
 }
+
+if (!dayReady) {
+  return (
+    <LinearGradient colors={["#0B132B", "#1C2541"]} style={styles.container}>
+      <HomeSkeleton/>
+    </LinearGradient>
+  );
+}
+
 
 
 
@@ -552,7 +593,8 @@ if (!openDay) {
   <ContextPill
     label="Goals 🎯"
     value={openDay ? "View" : "—"}
-    onPress={()=>setIsGoalsModalOpen(true)}
+    onPress={()=>{setIsGoalsModalOpen(true)
+    }}
   />
   <ContextPill
     label="Sleep 😴"
@@ -698,19 +740,34 @@ if (!openDay) {
   visible={isSleepModalOpen}
   onClose={() => {
       setIsSleepModalOpen(false);
-      setActiveBlockIndex(null);
+      
     }}
   onHidden={() => setIsSleepModalOpen(false)} // 👈 FORCE RELEASE
   onConfirm={handleConfirmSleep}
 />
 )}
 
-{isGoalsModalOpen && (
-  <DailyGoalsModal
-    goals={dailyGoals}
-    onClose={() => setIsGoalsModalOpen(false)}
-  />
+
+{openDay && (
+  <Modal
+    isVisible={isGoalsModalOpen}
+    onSwipeComplete={() => setIsGoalsModalOpen(false)}
+    swipeDirection="down"
+    onBackdropPress={() => setIsGoalsModalOpen(false)}
+    backdropOpacity={0.5}
+    style={styles.modalContainer}
+    propagateSwipe
+  >
+    <View style={styles.modalContent}>
+      <DailyGoalsModal
+        dayId={openDay.id}
+        onClose={() => setIsGoalsModalOpen(false)}
+      />
+    </View>
+  </Modal>
 )}
+
+
 
     </LinearGradient>
 )}
@@ -782,7 +839,9 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
+    flex: 1,
+    gap: 18
   },
 
   modalOverlay: {
@@ -800,7 +859,7 @@ modalContent: {
   borderTopLeftRadius: 20,
   borderTopRightRadius: 20,
   padding: 10,
-  minHeight: 450,
+  minHeight: 300,
 },
 
 modalContentSleep: {

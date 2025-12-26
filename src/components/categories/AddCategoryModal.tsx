@@ -29,7 +29,7 @@ export default function AddCategoryModal({
   categories,
   onCreate,
 }: Props) {
-  const [name, setName] = useState("");
+  const [label, setLabel] = useState("");
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
 
   const usedColors = categories.map((c) => c.color);
@@ -37,29 +37,28 @@ export default function AddCategoryModal({
   // Reset state when modal closes
   useEffect(() => {
     if (!visible) {
-      setName("");
+      setLabel("");
       setSelectedColor(null);
     }
   }, [visible]);
 
-  const canSave = name.trim().length > 0 && selectedColor !== null;
+  const canSave = label.trim().length > 0 && selectedColor !== null;
 
- const authUser = useAuthStore((s) => s.user);
+ 
 
-const handleSave = async () => {
-  if (!canSave || !authUser) return;
+const handleSave = () => {
+  if (!canSave) return;
 
-  const newCategory = await addCategory(
-    name.trim(),
-    selectedColor!,
-    authUser.id
-  );
+  const newCategory = {
+    label: label.trim(),
+    color: selectedColor!,
+  };
 
-    console.log("NEW CATEGORY RETURNED:", newCategory);
-
-  onCreate(newCategory);
+  onCreate(newCategory as any); // ID will be added in Home
   onClose();
 };
+
+
 
 
   return (
@@ -82,8 +81,8 @@ const handleSave = async () => {
           {/* Name Input */}
           <Text style={styles.label}>Category name</Text>
           <TextInput
-            value={name}
-            onChangeText={setName}
+            value={label}
+            onChangeText={setLabel}
             placeholder="e.g. Gym"
             placeholderTextColor="#8B93B0"
             style={styles.input}

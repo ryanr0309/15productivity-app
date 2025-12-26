@@ -24,7 +24,7 @@ export async function addCategory(
   // 🔑 NORMALIZE HERE
   return {
     id: data.id,
-    name: data.label, // 👈 FIX
+    label: data.label, // 👈 FIX
     color: data.color,
   };
 }
@@ -43,7 +43,7 @@ export async function fetchCategories(userId: string): Promise<Category[]> {
 
   return (data ?? []).map(c => ({
     id: c.id,
-    name: c.label, // ✅ mapped
+    label: c.label, // ✅ mapped
     color: c.color,
   }));
 }
