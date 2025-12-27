@@ -6,19 +6,18 @@ import { getBlockDate } from "./time";
 export type Block = {
   id: string;
 
-  // UI-friendly
-  startTime: string;     // "HH:MM"
-  endTime: string;       // "HH:MM"
-  timeLabel: string;     // "8:00AM – 8:45AM"
+  // 🔑 LOGIC (single source of truth)
+  startTime: Date;
+  endTime: Date;
 
-  completed: boolean;    // derived from DB status
+  // 🔑 UI
+  timeLabel: string;
+
+  completed: boolean;
   categoryId: string | null;
   description: string;
-
-  // keep these if you need exact timestamps later (recommended)
-  startISO: string;
-  endISO: string;
 };
+
 
 type BlockState =
   | "upcoming"
@@ -26,15 +25,18 @@ type BlockState =
   | "completed"
   | "missed";
 
-export function getBlockState(block: Block, now = Date.now()): BlockState {
-  const start = new Date(block.startISO).getTime();
-  const end = new Date(block.endISO).getTime();
+
+
+export function getBlockState(block: Block, now = Date.now()) {
+  const start = block.startTime.getTime();
+  const end = block.endTime.getTime();
 
   if (block.completed) return "completed";
   if (now >= start && now < end) return "active";
   if (now >= end) return "missed";
   return "upcoming";
 }
+
 
 export function getBlockStyles(
   state: BlockState,
@@ -124,66 +126,31 @@ export async function loadPersistedTimeBlocks(userId: string) {
 }
 
 
-export function mergeTimeBlocks(
-  generated: Block[],
-  persisted: {
-    start_time: string;
-    completed: boolean;
-    category_id: string | null;
-    description: string;
-  }[]
-): Block[] {
-  const persistedMap = new Map(
-    persisted.map(p => [p.start_time, p])
-  );
 
-  return generated.map(block => {
-    const persistedBlock = persistedMap.get(block.startTime);
 
-    // Persisted always wins
-    if (persistedBlock) {
-      return {
-        ...block,
-        completed: persistedBlock.completed,
-        categoryId: persistedBlock.category_id,
-        description: persistedBlock.description,
-      };
-    }
 
-    // Otherwise, keep generated block (even if past)
-    return block;
+export function getCurrentBlockIndex(blocks: Block[]): number | null {
+  const now = new Date();
+  console.log("NOW:", now.toISOString());
+
+  blocks.forEach((block, i) => {
+    const start = new Date(block.startTime);
+    const end = new Date(block.endTime);
+
+    console.log(
+      i,
+      "start:", start.toISOString?.() ?? start,
+      "end:", end.toISOString?.() ?? end,
+      "match:", now >= start && now < end
+    );
   });
+
+  const index = blocks.findIndex(block => {
+    const start = new Date(block.startTime);
+    const end = new Date(block.endTime);
+    return now >= start && now < end;
+  });
+
+  return index === -1 ? null : index;
 }
 
-export function mergeAfterScheduleChange(
-  generated: Block[],
-  persisted: {
-    start_time: string;
-    completed: boolean;
-    category_id: string | null;
-    description: string;
-  }[]
-): Block[] {
-  function normalizeHHMM(time: string) {
-    return time.slice(0, 5);
-  }
-
-  const persistedMap = new Map(
-    persisted.map(p => [normalizeHHMM(p.start_time), p])
-  );
-
-  return generated.map(block => {
-    const persistedBlock = persistedMap.get(block.startTime);
-
-    if (persistedBlock) {
-      return {
-        ...block,
-        completed: persistedBlock.completed,
-        categoryId: persistedBlock.category_id,
-        description: persistedBlock.description,
-      };
-    }
-
-    return block;
-  });
-}

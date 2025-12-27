@@ -1,383 +1,111 @@
-import React, { useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Pressable,
-  Platform,
-} from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import {View,Text,StyleSheet,ScrollView,Pressable} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
 import { supabase } from "../../lib/supabase";
 import Modal from "react-native-modal";
-import { useLocalSearchParams } from "expo-router";
 import CooldownScreen from "../../components/home/cooldown";
-
-
 import { formatTime } from "../../utils/time";
-import {
-  getCurrentBlock,
-  getCurrentBlockIndex
-} from "../../utils/blocks";
-import { normalizeToInterval } from "../../utils/time";
+import {getCurrentBlock,getCurrentBlockIndex} from "../../utils/blocks";
 import { useFocusEffect } from "expo-router";
 import { useCallback } from "react";
 import TimeBlockCard from "../../components/time-block/TimeBlockCard";
 import TimeBlockModal from "../../components/time-block/TimeBlockModal";
-import { Block } from "../../utils/timeBlocks";
-import { dateToHHMM } from "../../utils/dateToHHMM";
-import { Category } from "../../constants/categories";
-import { User } from "@supabase/supabase-js";
-import { deleteCategory, fetchCategories } from "../../services/categories";
-import { useAuthStore } from "../../store/useAuthStore";
 import SleepModal from "../../components/home/sleepModal";
 import { closeOpenDay } from "../../lib/days";
 import StartDayScreen from "../../components/home/startday";
 import DailyGoalsModal from "../../components/config/DailyGoalsModal";
 import HomeSkeleton from "../../components/home/HomeSkeleton"
+import { useCategories } from "../../services/useCategories";
+import { useOpenDay } from "../../services/useOpenDay";
+import { useCooldown } from "../../services/useCooldown";
+import { useTimeBlocks } from "../../services/useTimeBlocks";
+import { formatRemaining } from "../../utils/time";
+import { ContextPill } from "../../components/home/contextPill";
+import { useDayGoals } from "../../services/useDayGoals";
 
 /* ===================================================== */
 
-export default function Home() {
-  const [loading, setLoading] = useState(true);
-  const [openDay, setOpenDay] = useState<any | null>(null);
-  const [blocks, setBlocks] = useState<Block[]>([]);
-  const [isSleepModalOpen, setIsSleepModalOpen] = useState(false);
-  const MIN_AWAKE_HOURS = 6;
 
- const [isGoalsModalOpen, setIsGoalsModalOpen] = useState(false);
+export default function Home() {
+  const {MIN_AWAKE_HOURS, COOLDOWN_HOURS, cooldownEnd, cooldownChecked, loadCooldown, getEarliestSleepTime} = useCooldown()
+  const [isSleepModalOpen, setIsSleepModalOpen] = useState(false);
+  
+
+
+  const { openDay, openDayChecked, reloadOpenDay } = useOpenDay();
+  const { blocks, dayReady, saveTimeBlock, getCurrentBlockIndex } = useTimeBlocks(openDay);
+  const { goals, goalsReady } = useDayGoals(openDay?.id ?? null);
+  const [isGoalsModalOpen, setIsGoalsModalOpen] = useState(false);
   const [activeBlockIndex, setActiveBlockIndex] = useState<number | null>(null);
   const [isTimeBlockModalOpen, setIsTimeBlockModalOpen] = useState(false);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const authUser = useAuthStore((s) => s.user);
-  const [openDayChecked, setOpenDayChecked] = useState(false);
-  const [cooldownChecked, setCooldownChecked] = useState(false);  
-  const [dayReady, setDayReady] = useState(false);
-
   const homeReady = openDayChecked && cooldownChecked;
-
-
-  const wakeTime = openDay
-  ? new Date(openDay.start_time)
-  : null;
-
-const earliestSleepTime = wakeTime
-  ? getEarliestSleepTime(wakeTime)
-  : null;
-
-const now = new Date();
-
-const canLogSleep =
-  earliestSleepTime ? now >= earliestSleepTime : false;
-
-const remainingMs =
-  earliestSleepTime
-    ? Math.max(earliestSleepTime.getTime() - now.getTime(), 0)
-    : 0;
-
-const COOLDOWN_HOURS = 4;
-
-
-
-
+  const wakeTime = openDay ? new Date(openDay.start_time) : null;
+  const earliestSleepTime = wakeTime ? getEarliestSleepTime(wakeTime) : null;
+  const now = new Date();
+  const canLogSleep = earliestSleepTime ? now >= earliestSleepTime : false;
+  const remainingMs = earliestSleepTime ? Math.max(earliestSleepTime.getTime() - now.getTime(), 0) : 0;
   const heroBlock = openDay ? getCurrentBlock(blocks) : null;
-  const dayId = openDay?.id ?? null;
-  const dailyGoals: string[] = openDay?.goals ?? [];
-
-  const { refresh } = useLocalSearchParams();
-
-  function getEarliestSleepTime(wakeTime: Date) {
-  return new Date(wakeTime.getTime() + MIN_AWAKE_HOURS * 60 * 60 * 1000);
-}
-async function handleAddCategory(category: Category) {
+  const activeBlock = activeBlockIndex !== null ? blocks[activeBlockIndex] : null;
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return;
-
-  const { data, error } = await supabase
-    .from("categories")
-    .insert({
-      user_id: user.id,
-      label: category.label, // 🔁 label → name
-      color: category.color,
-    })
-    .select("id, label, color")
-    .single();
-
-  if (error || !data) return;
-
-  setCategories((prev) => [
-    ...prev,
-    {
-      id: data.id,
-      label: data.label,
-      color: data.color,
-    },
-  ]);
-}
+  categories,
+  handleAddCategory,
+  handleDeleteCategory,
+} = useCategories();
 
 
+/* ================== EFFECTS ======================== */
 
-
-
-async function handleDeleteCategory(categoryId: string) {
-  // 1️⃣ Optimistic UI update
-  setCategories(prev =>
-    prev.filter(category => category.id !== categoryId)
-  );
-
-  // 2️⃣ Persist deletion
-  try {
-    await deleteCategory(categoryId);
-  } catch (err) {
-    console.error(err);
-    // Optional: refetch categories or show toast
-  }
-}
-
-
-  /* ================= LOAD OPEN DAY ================= */
-
-
-useEffect(() => {
-  async function loadCategories() {
-    const { data: auth } = await supabase.auth.getUser();
-
-    if (!auth?.user) {
-      setCategories([]);
-      return;
-    }
-
-    try {
-      const data = await fetchCategories(auth.user.id);
-      console.log("FETCHED CATEGORIES", data);
-
-      setCategories(data ?? []);
-    } catch (err) {
-      console.error("Failed to fetch categories", err);
-      setCategories([]);
-    }
-  }
-
-  loadCategories();
-}, []);
-
-
-
+const hasFocusedRef = useRef(false);
 
 useFocusEffect(
   useCallback(() => {
-    console.log("HOME FOCUSED → REFRESHING DAY");
-    refreshDay();
-  }, [])
+    if (hasFocusedRef.current) return;
+
+    hasFocusedRef.current = true;
+    reloadOpenDay();
+  }, [reloadOpenDay])
 );
 
 
-async function loadOpenDay() {
-  try {
-    setLoading(true);
-
-    const { data: auth } = await supabase.auth.getUser();
-
-    // 🔑 If no user, we now KNOW there is no open day
-    if (!auth?.user) {
-      setOpenDay(null);
-      setOpenDayChecked(true);
-      return;
-    }
-
-    const { data } = await supabase
-      .from("days")
-      .select("*")
-      .eq("user_id", auth.user.id)
-      .eq("status", "open")
-      .maybeSingle();
-
-    // 🔑 Open day is now definitively known (exists or not)
-    setOpenDay(data ?? null);
-    setOpenDayChecked(true);
-  } catch (err) {
-    console.error("Failed to load open day", err);
-
-    // 🔑 Even on error, we must unblock rendering
-    setOpenDay(null);
-    setOpenDayChecked(true);
-  } finally {
-    setLoading(false);
-  }
-}
-
-
-  useEffect(() => {
-    
-
-    loadOpenDay();
-  }, []);
-
-  /* ================= LOAD BLOCKS ================= */
-  const [cooldownEnd, setCooldownEnd] = useState<Date | null>(null);
-
-  async function loadCooldown() {
-    console.log("COOLDOWN EFFECT RUNNING");
-
-    const { data: auth } = await supabase.auth.getUser();
-    if (!auth?.user) {
-      console.log("COOLDOWN: NO AUTH USER");
-      return;
-    }
-
-    console.log("COOLDOWN USER READY:", auth.user.id);
-
-    const { data: day } = await supabase
-      .from("days")
-      .select("end_time")
-      .eq("user_id", auth.user.id)
-      .not("end_time", "is", null)
-      .order("end_time", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    console.log("COOLDOWN QUERY RESULT:", day);
-
-    if (!day?.end_time) {
-      setCooldownEnd(null);
-      return;
-    }
-
-    const end = new Date(day.end_time);
-    const unlockMs =
-      end.getTime() + COOLDOWN_HOURS * 60 * 60 * 1000;
-
-    if (Date.now() < unlockMs) {
-      setCooldownEnd(new Date(unlockMs));
-    } else {
-      setCooldownEnd(null);
-    }
-
-    setCooldownChecked(true);
-
-  }
 
 useEffect(() => {
-
-
-  loadCooldown();
-}, []);
-
-
-
-
-  useEffect(() => {
-  console.log(
-    "HOME categories state:",
-    categories.map(c => c.label)
-  );
-}, [categories]);
-
-
-  useEffect(() => {
-    if (!openDay) return;
-
-    async function loadBlocks() {
-      await ensureTimeBlocksExist(openDay);
-
-      const { data } = await supabase
-        .from("time_blocks")
-        .select("*")
-        .eq("day_id", openDay.id)
-        .order("start_time", { ascending: true });
-
-      setBlocks(normalizeBlocks(data ?? []));
-      setDayReady(true); // 🔑 THIS
-    }
-
-    loadBlocks();
-  }, [openDay]);
-
-  /* ================= HELPERS ================= */
-
-  function formatRemaining(ms: number) {
-  const totalMinutes = Math.ceil(ms / 60000);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
+  if (openDayChecked) {
+    loadCooldown();
   }
-  return `${minutes}m`;
-}
+}, [openDayChecked, loadCooldown]);
 
 
-  async function refreshDay() {
-    console.log("REFRESH DAY CALLED");
-  setLoading(true);
-
-  // clear stale UI
-  setBlocks([]);
+async function handleConfirmSleep(sleepTime: Date) {
+  console.log("HANDLE CONFIRM SLEEP FIRED", sleepTime);
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    setLoading(false);
-    return;
-  }
-
-  const { data: openDay } = await supabase
-    .from("days")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("status", "open")
-    .maybeSingle();
-
-  if (!openDay) {
-    setLoading(false);
-    return;
-  }
-
-  console.log("OPEN DAY QUERY RESULT:", openDay);
-  console.log("USER IN REFRESH:", user?.id);
-
-
-
-  const { data: blocks } = await supabase
-    .from("time_blocks")
-    .select("*")
-    .eq("day_id", openDay.id)
-    .order("start_time");
-
-  setOpenDay(openDay);
-  setBlocks(blocks ?? []);
-  setLoading(false);
-}
-
-
-
-async function handleConfirmSleep(sleepTime: Date) {
-  console.log("HANDLE CONFIRM SLEEP FIRED", sleepTime);
-
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth?.user) {
     console.log("NO AUTH USER");
     return;
   }
 
   try {
+    // 1️⃣ Close the open day in DB
     await closeOpenDay({
-      userId: auth.user.id,
+      userId: user.id,
       sleepTime,
     });
 
+    // 2️⃣ Close modal immediately
     setIsSleepModalOpen(false);
 
-    await refreshDay();
-    await loadCooldown(); // 🔑 REQUIRED
+    // 3️⃣ Refresh day identity
+    await reloadOpenDay();
+
+    // 4️⃣ Refresh cooldown (now that day is closed)
+    await loadCooldown();
+
+    // 5️⃣ OPTIONAL: clear blocks if day closed
+    // reloadBlocks() will naturally no-op if openDay becomes null
 
   } catch (err) {
     console.error("Failed to log sleep", err);
@@ -385,198 +113,64 @@ async function handleConfirmSleep(sleepTime: Date) {
 }
 
 
-
-  function handleOpenBlock(blockIndex: number) {
-    setActiveBlockIndex(blockIndex);
-    setIsTimeBlockModalOpen(true);
-  }
-
-  function handleLogNow() {
-    const index = getCurrentBlockIndex(blocks);
-    if (index === null) return;
-    handleOpenBlock(index);
-  }
-
-  function normalizeBlocks(rows: any[]): Block[] {
-  return rows.map((row) => {
-    const startISO = row.start_time; // string
-    const endISO = row.end_time;     // string
-
-    return {
-      id: row.id,
-      startISO,
-      endISO,
-
-      startTime: dateToHHMM(startISO),
-      endTime: dateToHHMM(endISO),
-      timeLabel: `${formatTime(startISO)} – ${formatTime(endISO)}`,
-
-      completed: row.status === "logged",
-      categoryId: row.category_id ?? null,
-      description: row.description ?? "",
-    };
-  });
+function handleOpenBlock(blockIndex: number) {
+  setActiveBlockIndex(blockIndex);
+  setIsTimeBlockModalOpen(true);
 }
 
-  async function ensureTimeBlocksExist(day: any) {
-  const { data: existingBlocks } = await supabase
-    .from("time_blocks")
-    .select("start_time, end_time")
-    .eq("day_id", day.id)
-    .order("start_time", { ascending: true });
-
-  const intervalMs = day.interval_minutes * 60 * 1000;
-  const now = Date.now();
-
-  let nextStart: Date;
-
-  if (existingBlocks && existingBlocks.length > 0) {
-    nextStart = new Date(
-      existingBlocks[existingBlocks.length - 1].end_time
-    );
-  } else {
-    nextStart = normalizeToInterval(
-      new Date(day.start_time),
-      day.interval_minutes
-    );
-  }
-
-  const blocksToInsert: any[] = [];
-
-  // ✅ Generate until one block PAST now
-  while (nextStart.getTime() < now + intervalMs) {
-    const start = new Date(nextStart);
-    const end = new Date(start.getTime() + intervalMs);
-
-    blocksToInsert.push({
-      day_id: day.id,
-      start_time: start.toISOString(),
-      end_time: end.toISOString(),
-      status: "upcoming",
-    });
-
-    nextStart = end;
-  }
-
-  // 🔥 THIS WAS MISSING
-  if (blocksToInsert.length > 0) {
-    await supabase.from("time_blocks").insert(blocksToInsert);
-  }
-
+function handleLogNow() {
+  const index = getCurrentBlockIndex();
+  console.log(index)
+  if (index === null) return;
+  handleOpenBlock(index);
 }
 
+/* ================= RENDER ================= */
 
+function renderContent() {
+  // 1️⃣ App not ready
+  if (!openDayChecked || !cooldownChecked) {
+    return <HomeSkeleton />;
+  }
 
-async function handleSaveTimeBlock({
-  blockId,
-  categoryId,
-  description,
-}: {
-
-  blockId: string;
-  categoryId: string | null;
-  description: string;
-}) {
-  // 1️⃣ Optimistic UI update (ID-based)
-  setBlocks(prev =>
-    prev.map(block =>
-      block.id === blockId
-        ? {
-            ...block,
-            categoryId,
-            description,
-            completed: true,
-          }
-        : block
-    )
-  );
-
-  // 2️⃣ Persist to Supabase (same ID)
-  await supabase
-    .from("time_blocks")
-    .update({
-      category_id: categoryId,
-      description,
-      status: "logged",
-    })
-    .eq("id", blockId);
-
-  // 3️⃣ Close modal
-  setIsTimeBlockModalOpen(false);
-  setActiveBlockIndex(null);
-}
-
-
-
-  const activeBlock =
-  activeBlockIndex !== null ? blocks[activeBlockIndex] : null;
-
-  /* ================= RENDER ================= */
-
-  if (!homeReady) {
-  return null;
-}
-
+  // 2️⃣ Cooldown
   if (cooldownEnd) {
+    return (
+      <CooldownScreen
+        unlockTime={cooldownEnd}
+        onFinished={async () => {
+          await loadCooldown();
+          await reloadOpenDay();
+        }}
+      />
+    );
+  }
+
+  // 3️⃣ No open day
+  if (!openDay) {
+    return (
+      <StartDayScreen
+        onStarted={async () => {
+          await reloadOpenDay();
+        }}
+      />
+    );
+  }
+
+  // 4️⃣ Blocks not ready
+  if (!dayReady) {
+    return <HomeSkeleton />;
+  }
+
+  // 5️⃣ Fully ready
   return (
-    <CooldownScreen
-      unlockTime={cooldownEnd}
-      onFinished={async () => {
-        setCooldownEnd(null);
-        await loadOpenDay(); // 🔑 this is critical
-      }}
-    />
-  );
-}
-
-
-if (!openDay && !loading) {
-  return (
-    <StartDayScreen
-      onStarted={async () => {
-        await refreshDay();
-      }}
-    />
-  );
-}
-
-if (!dayReady) {
-  return (
-    <LinearGradient colors={["#0B132B", "#1C2541"]} style={styles.container}>
-      <HomeSkeleton/>
-    </LinearGradient>
-  );
-}
-
-
-
-
-  return (
-    <LinearGradient colors={["#0B132B", "#1C2541"]} style={styles.container}>
+    <>
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* HEADER */}
         <View style={styles.header}>
           <Ionicons name="time-outline" size={20} color="#FFFFFF" />
           <Text style={styles.headerText}>15 Productivity</Text>
         </View>
-
-        {!loading && !openDay && (
-  <TouchableOpacity
-    onPress={() => router.push("/start-day")}
-    style={{
-      backgroundColor: "#24304D",
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      borderRadius: 14,
-      alignSelf: "center",
-      marginTop: 12,
-    }}
-  >
-    <Text style={{ color: "#FFFFFF", fontWeight: "600" }}>
-      Start Day
-    </Text>
-  </TouchableOpacity>
-)}
 
 
 
@@ -723,7 +317,7 @@ if (!dayReady) {
     categories={categories}
     onAddCategory={handleAddCategory}
     onDeleteCategory={handleDeleteCategory}
-    onSave={handleSaveTimeBlock}
+    onSave={saveTimeBlock}
     onClose={() => {
       setIsTimeBlockModalOpen(false);
       setActiveBlockIndex(null);
@@ -760,36 +354,23 @@ if (!dayReady) {
   >
     <View style={styles.modalContent}>
       <DailyGoalsModal
-        dayId={openDay.id}
-        onClose={() => setIsGoalsModalOpen(false)}
-      />
+  goals={goals}
+  loading={!goalsReady}
+  onClose={() => setIsGoalsModalOpen(false)}
+/>
+
     </View>
   </Modal>
 )}
-
-
-
-    </LinearGradient>
-)}
-
-function ContextPill({
-  label,
-  value,
-  onPress
-}: {
-  label: string;
-  value: string;
-  onPress?: () => void;
-}) {
-  return (
-    <Pressable style={styles.contextPill} onPress={onPress}>
-      <Text style={styles.contextLabel}>{label}</Text>
-      <Text style={styles.contextValue}>{value}</Text>
-    </Pressable>
+</>
   );
 }
 
-
+  return (
+     <LinearGradient colors={["#0B132B", "#1C2541"]} style={styles.container}>
+    {renderContent()}
+  </LinearGradient>
+)}
 
 /* ================= STYLES ================= */
 
@@ -874,24 +455,6 @@ modalContentSleep: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 24,
-  },
-  contextPill: {
-    backgroundColor: "#24304D",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    alignItems: "center",
-    width: "23%",
-  },
-  contextLabel: {
-    color: "#6F7BAE",
-    fontSize: 11,
-  },
-  contextValue: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "600",
-    marginTop: 4,
   },
 
   heroHeader: {

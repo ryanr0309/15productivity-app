@@ -1,94 +1,82 @@
-import { View, Text, StyleSheet, Pressable } from "react-native";
-import { colors } from "../../constants/colors";
-import { useEffect, useState } from "react";
-import { supabase } from "../../lib/supabase"; // adjust path
 import React from "react";
-import { ScrollView, KeyboardAvoidingView, Platform } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
+import { colors } from "../../constants/colors";
 
 type Props = {
-  dayId: string; // or date string (YYYY-MM-DD)
+  goals: string[];
+  loading: boolean;
   onClose: () => void;
 };
 
-
-export default function DailyGoalsModal({ dayId, onClose }: Props) {
-  const [goals, setGoals] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function fetchGoals() {
-      const { data, error } = await supabase
-        .from("day_goals")
-        .select("text")
-        .eq("day_id", dayId)
-        .order("created_at");
-
-      if (!error && data) {
-        setGoals(data.map(g => g.text));
-      }
-
-      setLoading(false);
-    }
-
-    fetchGoals();
-  }, [dayId]);
-
+export default function DailyGoalsModal({
+  goals,
+  loading,
+  onClose,
+}: Props) {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView
-      contentContainerStyle={styles.sheetContainer}
-      keyboardShouldPersistTaps="handled"
-    >
-      
-    <View style={styles.handle} />
-    <View style={styles.sheet}>
-  {/* Header */}
-  <View style={styles.header}>
-    <Text style={styles.title}>Today’s Goals</Text>
-    <Text style={styles.subtitle}>
-      Locked in for today
-    </Text>
-  </View>
+        contentContainerStyle={styles.sheetContainer}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.handle} />
 
-  {/* Goals */}
-  <View style={styles.goalsContainer}>
-    {loading ? (
-      <Text style={styles.empty}>Loading…</Text>
-    ) : goals.length === 0 ? (
-      <Text style={styles.empty}>
-        No goals were set for today
-      </Text>
-    ) : (
-      goals.map((goal, index) => (
-        <View key={index} style={styles.goalRow}>
-          <Text style={styles.goalIndex}>
-            {index + 1}.
+        <View style={styles.sheet}>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.title}>Today’s Goals</Text>
+            <Text style={styles.subtitle}>
+              Locked in for today
+            </Text>
+          </View>
+
+          {/* Goals */}
+          <View style={styles.goalsContainer}>
+            {loading ? (
+              <Text style={styles.empty}>Loading…</Text>
+            ) : goals.length === 0 ? (
+              <Text style={styles.empty}>
+                No goals were set for today
+              </Text>
+            ) : (
+              goals.map((goal, index) => (
+                <View key={index} style={styles.goalRow}>
+                  <Text style={styles.goalIndex}>
+                    {index + 1}.
+                  </Text>
+                  <Text style={styles.goalText}>
+                    {goal}
+                  </Text>
+                </View>
+              ))
+            )}
+          </View>
+
+          {/* Helper */}
+          <Text style={styles.helper}>
+            Goals guide your focus, but don’t affect your productivity score.
           </Text>
 
-          <Text style={styles.goalText}>
-            {goal}
-          </Text>
+          {/* Dismiss */}
+          <Pressable onPress={onClose} style={styles.closeButton}>
+            <Text style={styles.closeText}>Close</Text>
+          </Pressable>
         </View>
-      ))
-    )}
-  </View>
-
-  {/* Helper */}
-  <Text style={styles.helper}>
-    Goals guide your focus, but don’t affect your productivity score.
-  </Text>
-
-  {/* Dismiss */}
-  <Pressable onPress={onClose} style={styles.closeButton}>
-    <Text style={styles.closeText}>Close</Text>
-  </Pressable>
-</View>
-</ScrollView>
-</KeyboardAvoidingView>
-  )
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
 }
+
 
 const styles = StyleSheet.create({
   sheet: {
