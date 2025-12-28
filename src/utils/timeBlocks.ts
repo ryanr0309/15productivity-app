@@ -16,7 +16,13 @@ export type Block = {
   completed: boolean;
   categoryId: string | null;
   description: string;
+
+  // 🧠 NEW — classification system
+  classification: "productive" | "neutral" | "unproductive";
+  goalAlignment: "strong" | "partial" | "none";
 };
+
+
 
 
 type BlockState =

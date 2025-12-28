@@ -1,40 +1,37 @@
 // components/insights/DateStrip.tsx
 
-import { ScrollView, Pressable, Text, StyleSheet, View } from "react-native";
-import { colors } from "../../constants/colors";
 import React from "react";
+import { ScrollView, Pressable, Text, StyleSheet } from "react-native";
+import { colors } from "../../constants/colors";
 
 type DateStripProps = {
-  selectedDate: Date;
-  onSelectDate: (date: Date) => void;
+  totalDays: number;
+  selectedIndex: number;
+  onSelectIndex: (index: number) => void;
 };
 
-const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
-
 export default function DateStrip({
-  selectedDate,
-  onSelectDate,
+  totalDays,
+  selectedIndex,
+  onSelectIndex,
 }: DateStripProps) {
-  const dates = generateDateRange(selectedDate);
-
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.container}
     >
-      {dates.map((date) => {
-        const isActive = isSameDay(date, selectedDate);
+      {Array.from({ length: totalDays }).map((_, index) => {
+        const isActive = index === selectedIndex;
 
         return (
           <Pressable
-            key={date.toISOString()}
-            onPress={() => onSelectDate(date)}
-            style={[styles.dateItem, isActive && styles.activeItem]}
+            key={index}
+            onPress={() => onSelectIndex(index)}
+            style={[styles.dayItem, isActive && styles.activeItem]}
           >
             <Text style={[styles.dayText, isActive && styles.activeText]}>
-              {DAY_LABELS[date.getDay()]}
-              {date.getDate()}
+              Day {index + 1}
             </Text>
           </Pressable>
         );
@@ -43,52 +40,27 @@ export default function DateStrip({
   );
 }
 
-function generateDateRange(centerDate: Date): Date[] {
-  const dates: Date[] = [];
-
-  for (let i = -2; i <= 2; i++) {
-    const d = new Date(centerDate);
-    d.setDate(centerDate.getDate() + i);
-    dates.push(d);
-  }
-
-  return dates;
-}
-
-function isSameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
-    gap: 12,
+    gap: 8,
   },
-
-  dateItem: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+  dayItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     borderRadius: 12,
-    backgroundColor: "transparent",
+    backgroundColor: "rgba(255,255,255,0.06)",
   },
-
   activeItem: {
-    backgroundColor: "rgba(255,255,255,0.15)",
+    backgroundColor: colors.accent,
   },
-
   dayText: {
     color: colors.textSecondary,
     fontSize: 14,
     fontWeight: "500",
   },
-
   activeText: {
-    color: colors.textPrimary,
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontWeight: "600",
   },
 });

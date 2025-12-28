@@ -32,7 +32,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card, // rgba(0,0,0,0.5)
     borderRadius: 16,
     padding: 16,
-    marginTop: 20,
+    marginTop: 0,
   },
 
   title: {

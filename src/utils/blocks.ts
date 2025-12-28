@@ -46,6 +46,9 @@ export function normalizeBlocks(rows: any[]): Block[] {
       completed: row.status === "logged",
       categoryId: row.category_id ?? null,
       description: row.description ?? "",
+
+      classification: row.classification ?? "neutral",
+      goalAlignment: row.goal_alignment ?? "none",
     };
   });
 }

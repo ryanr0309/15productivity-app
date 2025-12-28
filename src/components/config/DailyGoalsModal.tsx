@@ -8,7 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { colors } from "../../constants/colors";
+
 
 type Props = {
   goals: string[];

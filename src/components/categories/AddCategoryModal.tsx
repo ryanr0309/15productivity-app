@@ -9,8 +9,6 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import ColorPicker from "../../components/ColorPicker";
 import { Category } from "../../constants/categories";
-import { addCategory } from "../../services/categories";
-import { useAuthStore } from "../../store/useAuthStore";
 import Modal from "react-native-modal";
 
 
