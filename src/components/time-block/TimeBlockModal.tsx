@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Platform,
+  Keyboard
 } from "react-native";
 import { colors } from "../../constants/colors";
 import { Category } from "../../constants/categories";
@@ -149,8 +150,14 @@ function handleDeleteCategoryLocal(categoryId: string) {
   placeholder="What did you work on?"
   placeholderTextColor={colors.textSecondary}
   style={styles.input}
-  multiline
   maxLength={MAX_DESCRIPTION_LENGTH}
+  multiline={true}   
+  numberOfLines={4}
+  returnKeyType="done"            // shows “Done”
+  blurOnSubmit                    // closes keyboard
+  onSubmitEditing={() => {
+    Keyboard.dismiss();
+  }}
 />
 
 
@@ -179,66 +186,63 @@ function handleDeleteCategoryLocal(categoryId: string) {
         </Text>
       </Pressable>
 
+      
+
       {/* ADD CATEGORY MODAL */}
       <AddCategoryModal
   visible={isAddCategoryOpen}
   onClose={() => setIsAddCategoryOpen(false)}
   categories={categories}
   onCreate={(category) => {
-    console.log("ON CREATE FIRED", category);
     onAddCategory(category);
     setIsAddCategoryOpen(false);
   }}
 />
-
     </ScrollView>
   </KeyboardAvoidingView> 
   );
 }
 const styles = StyleSheet.create({
-  sheet: {
-    backgroundColor: "#F7F7F7",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-  },
+
 
   handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#CCC",
-    alignSelf: "center",
-    marginBottom: 16,
+      width: 40,
+  height: 4,
+  borderRadius: 2,
+  backgroundColor: "rgba(255,255,255,0.25)",
+  alignSelf: "center",
+  marginBottom: 14,
   },
 
   time: {
-    fontSize: 20,
-    fontWeight: "700",
-    marginBottom: 4,
-    color: "#000",
+      fontSize: 20,
+  fontWeight: "700",
+  color: "#FFFFFF",
+  marginBottom: 4,
   },
   sheetContainer: {
+  backgroundColor: "#1E2433",
   borderRadius: 20,
-  paddingHorizontal: 16,
+  paddingHorizontal: 18,
   paddingTop: 12,
-  paddingBottom: 12, // 🔽 REDUCED from large value
-  maxHeight: "85%",
+  paddingBottom: 0,
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.06)",
 },
 
 
-
   date: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 20,
+      fontSize: 13,
+  color: "rgba(255,255,255,0.6)",
+  marginBottom: 18,
   },
 
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 8,
-    color: "#000",
+      fontSize: 13,
+  fontWeight: "600",
+  color: "rgba(255,255,255,0.75)",
+  marginBottom: 8,
+  marginTop: 6,
   },
 
   pillRow: {
@@ -257,28 +261,33 @@ const styles = StyleSheet.create({
 
   addPill: {
     borderWidth: 1,
-    borderColor: "#CCC",
-    backgroundColor: "transparent",
+  borderColor: "rgba(255,255,255,0.2)",
+  backgroundColor: "rgba(255,255,255,0.05)",
   },
 
   addPillText: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#555",
+      fontSize: 20,
+  fontWeight: "600",
+  color: "rgba(255,255,255,0.7)",
   },
 
   input: {
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    padding: 12,
-    minHeight: 80,
-    textAlignVertical: "top",
+      backgroundColor: "#252B3A",
+  borderRadius: 14,
+  padding: 14,
+  minHeight: 90,
+  color: "#FFFFFF",
+  textAlignVertical: "top",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.08)",
+  
+
   },
 
   helper: {
-    fontSize: 12,
-    color: "#777",
-    marginTop: 6,
+      fontSize: 12,
+  color: "rgba(255,255,255,0.5)",
+  marginTop: 6,
   },
 
   saveButton: {

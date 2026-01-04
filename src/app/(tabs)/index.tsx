@@ -1,5 +1,6 @@
+
 import React, { useEffect, useRef, useState } from "react";
-import {View,Text,StyleSheet,ScrollView,Pressable} from "react-native";
+import {View,Text,StyleSheet,ScrollView,Pressable, Platform, FlatList} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../../lib/supabase";
@@ -22,7 +23,24 @@ import { useCooldown } from "../../services/useCooldown";
 import { useTimeBlocks } from "../../services/useTimeBlocks";
 import { formatRemaining } from "../../utils/time";
 import { ContextPill } from "../../components/home/contextPill";
-import { useDayGoals } from "../../services/useDayGoals";
+import DayUnlockFlow from "../../components/day-unlock/DayUnlockFlow";
+import { Habit } from "../../constants/habits";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+const colors = {
+  background: "#0B1224",
+  card: "rgba(255,255,255,0.06)",
+  cardStrong: "rgba(255,255,255,0.09)",
+  textPrimary: "#FFFFFF",
+  textSecondary: "rgba(255,255,255,0.7)",
+  border: "rgba(255,255,255,0.10)",
+  accent: "#4DA3FF",
+  good: "#22C55E",
+  warn: "#F59E0B",
+  danger: "#EF4444",
+};
+
+
+
 
 /* ===================================================== */
 
@@ -30,15 +48,12 @@ import { useDayGoals } from "../../services/useDayGoals";
 export default function Home() {
   const {MIN_AWAKE_HOURS, COOLDOWN_HOURS, cooldownEnd, cooldownChecked, loadCooldown, getEarliestSleepTime} = useCooldown()
   const [isSleepModalOpen, setIsSleepModalOpen] = useState(false);
-  
-
-
   const { openDay, openDayChecked, reloadOpenDay } = useOpenDay();
-  const { blocks, dayReady, saveTimeBlock, getCurrentBlockIndex } = useTimeBlocks(openDay);
-  const { goals, goalsReady } = useDayGoals(openDay?.id ?? null);
-  const [isGoalsModalOpen, setIsGoalsModalOpen] = useState(false);
+  const { blocks, dayReady, saveTimeBlock, getCurrentBlockIndex, reloadTimeBlocks } = useTimeBlocks(openDay);
   const [activeBlockIndex, setActiveBlockIndex] = useState<number | null>(null);
   const [isTimeBlockModalOpen, setIsTimeBlockModalOpen] = useState(false);
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const insets = useSafeAreaInsets();
   const homeReady = openDayChecked && cooldownChecked;
   const wakeTime = openDay ? new Date(openDay.start_time) : null;
   const earliestSleepTime = wakeTime ? getEarliestSleepTime(wakeTime) : null;
@@ -51,6 +66,7 @@ export default function Home() {
   categories,
   handleAddCategory,
   handleDeleteCategory,
+  reloadCategories
 } = useCategories();
 
 
@@ -60,13 +76,43 @@ const hasFocusedRef = useRef(false);
 
 useFocusEffect(
   useCallback(() => {
-    if (hasFocusedRef.current) return;
+    let cancelled = false;
 
-    hasFocusedRef.current = true;
-    reloadOpenDay();
-  }, [reloadOpenDay])
+    async function loadHome() {
+      if (cancelled) return;
+
+      await reloadOpenDay();      // source of truth
+      await reloadCategories();   // cheap
+      await reloadTimeBlocks();   // depends on openDay
+    }
+
+    loadHome();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadOpenDay, reloadCategories, reloadTimeBlocks])
 );
 
+
+useEffect(() => {
+  async function loadHabits() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("habits")
+      .select("id, name, color")
+      .eq("user_id", user.id);
+
+    setHabits(data ?? []);
+  }
+
+  loadHabits();
+}, []);
 
 
 useEffect(() => {
@@ -77,40 +123,36 @@ useEffect(() => {
 
 
 async function handleConfirmSleep(sleepTime: Date) {
-  console.log("HANDLE CONFIRM SLEEP FIRED", sleepTime);
-
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    console.log("NO AUTH USER");
-    return;
-  }
+  if (!user) return;
 
   try {
-    // 1️⃣ Close the open day in DB
-    await closeOpenDay({
+    // 1️⃣ Close day and capture ID
+    const dayId = await closeOpenDay({
       userId: user.id,
       sleepTime,
     });
 
-    // 2️⃣ Close modal immediately
+    // 2️⃣ Analyze the completed day (fire-and-forget)
+    supabase.functions.invoke("analyze-day", {
+      body: { dayId },
+    });
+
+    // 3️⃣ Close modal
     setIsSleepModalOpen(false);
 
-    // 3️⃣ Refresh day identity
+    // 4️⃣ Refresh state
     await reloadOpenDay();
-
-    // 4️⃣ Refresh cooldown (now that day is closed)
     await loadCooldown();
-
-    // 5️⃣ OPTIONAL: clear blocks if day closed
-    // reloadBlocks() will naturally no-op if openDay becomes null
 
   } catch (err) {
     console.error("Failed to log sleep", err);
   }
 }
+
 
 
 function handleOpenBlock(blockIndex: number) {
@@ -120,44 +162,41 @@ function handleOpenBlock(blockIndex: number) {
 
 function handleLogNow() {
   const index = getCurrentBlockIndex();
-  console.log(index)
+
   if (index === null) return;
   handleOpenBlock(index);
 }
 
 /* ================= RENDER ================= */
 
+
 function renderContent() {
-  // 1️⃣ App not ready
-  if (!openDayChecked || !cooldownChecked) {
+  // 1️⃣ App still loading initial state
+  if (!openDayChecked) {
     return <HomeSkeleton />;
   }
 
-  // 2️⃣ Cooldown
+  // 2️⃣ Cooldown (passive gate)
   if (cooldownEnd) {
     return (
       <CooldownScreen
         unlockTime={cooldownEnd}
-        onFinished={async () => {
-          await loadCooldown();
-          await reloadOpenDay();
-        }}
+        onFinished={loadCooldown}
       />
     );
   }
 
-  // 3️⃣ No open day
-  if (!openDay) {
-    return (
-      <StartDayScreen
-        onStarted={async () => {
-          await reloadOpenDay();
-        }}
-      />
-    );
+  // 3️⃣ Day Unlock Flow
+  // - If NO open day → flow will create one
+  // - If open day but not locked → flow continues
+  if (!openDay || openDay.day_phase !== "locked") {
+    return <DayUnlockFlow
+  day={openDay}
+  onDayChanged={reloadOpenDay}
+/>
   }
 
-  // 4️⃣ Blocks not ready
+  // 4️⃣ Open day exists, locked, but blocks still loading
   if (!dayReady) {
     return <HomeSkeleton />;
   }
@@ -165,12 +204,20 @@ function renderContent() {
   // 5️⃣ Fully ready
   return (
     <>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      
         {/* HEADER */}
-        <View style={styles.header}>
-          <Ionicons name="time-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.headerText}>15 Productivity</Text>
-        </View>
+       <View style={styles.header}>
+                 <View style={styles.brandLeft}>
+                   <View style={styles.logoCircle}>
+                     <Ionicons name="time-outline" size={18} color={colors.textPrimary} />
+                   </View>
+                   <Text style={styles.brandText}>15 Productivity</Text>
+                 </View>
+       
+                 <View style={styles.headerRightPill}>
+                   <Text style={styles.headerRightPillText}>{formatTime(now)}</Text>
+                 </View>
+               </View>
 
 
 
@@ -181,14 +228,8 @@ function renderContent() {
     value={openDay ? formatTime(openDay.start_time) : "—"}
   />
   <ContextPill
-    label="Interval ⏱"
-    value={openDay ? `${openDay.interval_minutes} min` : "—"}
-  />
-  <ContextPill
-    label="Goals 🎯"
-    value={openDay ? "View" : "—"}
-    onPress={()=>{setIsGoalsModalOpen(true)
-    }}
+    label="Streaks ⏱"
+    value="5 days"
   />
   <ContextPill
     label="Sleep 😴"
@@ -206,27 +247,45 @@ function renderContent() {
         {openDay && (
           <>
             {/* PROMPT */}
+            <View style={styles.hero}>
             <Text style={styles.prompt}>What are you doing right now?</Text>
 
             {/* HERO */}
             <View style={styles.heroCard}>
+              <View style={styles.heroCardTop}>
+              <View>
               <Text style={styles.heroTime}>
-  {heroBlock ? heroBlock.timeLabel : "No active block"}
-</Text>
-
+              {heroBlock ? heroBlock.timeLabel : "No active block"}
+              </Text>
+              <Text style={styles.heroSmall}>
+              {"Tap Log Now to record this block"}
+                </Text>
+              </View>
 
               <Pressable onPress={handleLogNow} style={styles.primaryButton}>
                 <Text style={styles.primaryButtonText}>Log Now</Text>
+                <Ionicons name="arrow-forward" size={16} color={colors.textPrimary} />
               </Pressable>
-            </View>
+              </View>
+            
 
 {/* PRODUCTIVITY BAR */}
-        <View style={styles.productivity}>
-          <Text style={styles.productivityLabel}>Productivity Today</Text>
-          <View style={styles.progressTrack}>
-            <View style={styles.progressFill} />
-          </View>
-        </View>
+        <View style={styles.prodWrap}>
+                      <View style={styles.prodRow}>
+                        <Text style={styles.prodLabel}>Productivity today</Text>
+                        <Text style={styles.prodValue}>
+                          {"50% (15/30)"}
+                        </Text>
+                      </View>
+        
+                      <View style={styles.barOuter}>
+                        <View style={[styles.barInner, { width: `50%` }]} />
+                      </View>
+        
+                      <Text style={styles.prodHint}>
+                        Scored on blocks that have started (universal 15-min intervals).
+                      </Text>
+                    </View>
 
         {/* LOG SLEEP */}
 
@@ -234,61 +293,82 @@ function renderContent() {
         <Pressable
   style={[
     styles.sleepButton,
-    !canLogSleep && { opacity: 0.4 },
+    !canLogSleep ? styles.sleepBtnLocked : null,
   ]}
   disabled={!canLogSleep}
   onPress={() => setIsSleepModalOpen(true)}
 >
-  <Text style={styles.sleepText}>Log Sleep 🌙</Text>
+  <View style={styles.sleepBtnLeft}>
+                  <Text style={styles.sleepEmoji}>🌙</Text>
+                  <Text style={styles.sleepBtnText}>Log Sleep</Text>
+  </View>
 
   {!canLogSleep && earliestSleepTime && (
     <Text
-      style={{
-        color: "#B0B8D4",
-        fontSize: 12,
-        marginTop: 4,
-      }}
+      style={styles.sleepBtnRight}
     >
       Available in {formatRemaining(remainingMs)}
     </Text>
   )}
 </Pressable>
+</View>
+</View>
 
+<View style={styles.sectionHeader}>
+    <Text style={styles.sectionTitle}>Time Blocks</Text>
+    <Text style={styles.sectionSubtitle}>15-minute universal schedule</Text>
+</View>
 
             {/* GRID */}
-            <View style={styles.grid}>
-  {blocks.map((block, index) => {
 
- const category = categories.find(
-      c => c.id === block.categoryId
+<FlatList
+  data={blocks}
+  keyExtractor={(item) => item.id}
+  numColumns={3}
+  scrollEnabled={false} // 👈 IMPORTANT: parent handles scroll
+  columnWrapperStyle={styles.gridRow}
+  contentContainerStyle={styles.gridContainer}
+  renderItem={({ item, index }) => {
+    const plannedHabit = habits.find(
+      h => h.id === item.habit_id
     );
 
-     console.log("MATCH ATTEMPT:", {
-      blockCategoryId: block.categoryId,
-      categoryIds: categories.map(c => c.id),
-    });
-  
-  return (
-    
-    <TimeBlockCard
-      key={block.id}
-      block={block}
-      onPress={() => handleOpenBlock(index)}
-      category={category}
-    />
-  )})}
-</View>
+    const category = categories.find(
+      c => c.id === item.categoryId
+    );
+
+    return (
+      <TimeBlockCard
+        block={item}
+        plannedHabit={plannedHabit}
+        loggedCategory={category}
+        onPress={() => handleOpenBlock(index)}
+      />
+    );
+  }}
+/>
+
 
 
           </>
         )}
 
-      
+</>
+  );
+}
 
-
-      </ScrollView>
-
-      {/* MODAL */}
+  return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.bg}>
+     
+           <ScrollView
+             contentContainerStyle={styles.container}
+             showsVerticalScrollIndicator={false}
+           >
+    {renderContent()}
+    </ScrollView>
+    </View>
+     {/* MODAL */}
       {activeBlock && openDay && (
         
   <Modal
@@ -307,7 +387,7 @@ function renderContent() {
     propagateSwipe // 👈 IMPORTANT if modal scrolls
     avoidKeyboard
   >
-    <View style={styles.modalContent}>
+ 
   <TimeBlockModal
     blockId={activeBlock.id}
     timeRange={activeBlock.timeLabel}
@@ -323,12 +403,25 @@ function renderContent() {
       setActiveBlockIndex(null);
     }}
   />
-  </View>
   </Modal>
 
   
 )}
 {openDay && (
+  <Modal
+    isVisible={isSleepModalOpen}
+    onSwipeComplete={() => {
+      setIsSleepModalOpen(false);
+    }}
+    swipeDirection="down"
+    onBackdropPress={() => {
+      setIsSleepModalOpen(false);
+    }}
+    backdropOpacity={0.5}
+    style={styles.modalContainer}
+    propagateSwipe // 👈 IMPORTANT if modal scrolls
+    avoidKeyboard
+  >
 <SleepModal
   wakeTime={new Date(openDay.start_time)}  
   visible={isSleepModalOpen}
@@ -339,47 +432,31 @@ function renderContent() {
   onHidden={() => setIsSleepModalOpen(false)} // 👈 FORCE RELEASE
   onConfirm={handleConfirmSleep}
 />
+</Modal>
 )}
 
-
-{openDay && (
-  <Modal
-    isVisible={isGoalsModalOpen}
-    onSwipeComplete={() => setIsGoalsModalOpen(false)}
-    swipeDirection="down"
-    onBackdropPress={() => setIsGoalsModalOpen(false)}
-    backdropOpacity={0.5}
-    style={styles.modalContainer}
-    propagateSwipe
-  >
-    <View style={styles.modalContent}>
-      <DailyGoalsModal
-  goals={goals}
-  loading={!goalsReady}
-  onClose={() => setIsGoalsModalOpen(false)}
-/>
-
-    </View>
-  </Modal>
-)}
-</>
-  );
-}
-
-  return (
-     <LinearGradient colors={["#0B132B", "#1C2541"]} style={styles.container}>
-    {renderContent()}
-  </LinearGradient>
+  </SafeAreaView>
 )}
 
 /* ================= STYLES ================= */
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+   container: {
+      paddingHorizontal: 16,
+      paddingTop: Platform.OS === "android" ? 10 : 6,
+      paddingBottom: 28,
+    },
+
   scroll: { padding: 20, paddingBottom: 40 },
 
-  header: { flexDirection: "row", gap: 8, marginBottom: 20 },
-  headerText: { color: "#FFF", fontSize: 18, fontWeight: "600" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  
+  headerText: { color: "#EAEAF0", fontSize: 18, fontWeight: "600" },
 
   startDay: {
     backgroundColor: "#24304D",
@@ -393,40 +470,57 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
 
-  startDayText: { color: "#FFF", fontWeight: "600" },
+  startDayText: { color: "#EAEAF0", fontWeight: "600" },
 
-  prompt: { color: "#AAB4D6", marginBottom: 12 },
+  prompt: { 
+    color: colors.textPrimary,
+    fontSize: 18,
+    fontWeight: "900",
+    marginBottom: 10,
+  },
 
   heroCard: {
-    backgroundColor: "#1C2541",
-    padding: 20,
-    borderRadius: 20,
-    marginBottom: 20,
+    backgroundColor: colors.cardStrong,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
   },
-  heroTime: { color: "#FFF", fontSize: 18, fontWeight: "600" },
+  heroTime: { 
+     color: colors.textPrimary,
+    fontSize: 14,
+    fontWeight: "800",
+  },
 
   primaryButton: {
-    backgroundColor: "#4DA3FF",
-    marginTop: 14,
-    paddingVertical: 12,
-    borderRadius: 14,
+    flexDirection: "row",
     alignItems: "center",
+    gap: 8 as any,
+    backgroundColor: "rgba(77,163,255,0.25)",
+    borderWidth: 1,
+    borderColor: "rgba(77,163,255,0.45)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
   },
   primaryButtonText: {
-    color: "#0B132B",
-    fontWeight: "700",
+   color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: "800",
   },
 
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "flex-start",
-    flex: 1,
-    gap: 18
-  },
+gridContainer: {
+  paddingTop: 12,
+},
+
+gridRow: {
+  justifyContent: "space-between",
+  marginBottom: 10,
+},
+
 
   modalOverlay: {
-    flex: 1,
+
     justifyContent: "flex-end",
     backgroundColor: "rgba(0,0,0,0.4)",
   },
@@ -453,8 +547,8 @@ modalContentSleep: {
 
   contextRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 24,
+    gap: 10 as any,
+    marginBottom: 14,
   },
 
   heroHeader: {
@@ -492,19 +586,24 @@ modalContentSleep: {
   },
 
   sleepButton: {
+    marginTop: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: colors.border,
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: "#24304D",
-    paddingVertical: 14,
-    borderRadius: 16,
-    marginBottom: 28,
   },
   sleepText: {
-    color: "#FFFFFF",
+    color: "#EAEAF0",
     fontSize: 15,
     fontWeight: "600",
+  },
+   sleepBtnLocked: {
+    opacity: 0.55,
   },
 
 
@@ -516,13 +615,12 @@ block: {
 },
 
 blockInner: {
-  flex: 1,
   alignItems: "center",
   justifyContent: "center",
 },
 
 blockLabel: {
-  color: "#FFFFFF",
+  color: "#EAEAF0",
   fontSize: 13,
   fontWeight: "600",
   lineHeight: 14, // optical centering
@@ -543,4 +641,136 @@ press: {
   borderWidth: 2,
   borderColor: "red", 
 },
+ brandLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10 as any,
+  },
+  logoCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  brandText: {
+    color: colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
+  headerRightPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  headerRightPillText: {
+    color: colors.textPrimary,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+    safe: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+
+    bg: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: colors.background,
+    },
+    hero: {
+    marginBottom: 14,
+  },
+  
+  prodWrap: {
+    marginTop: 14,
+  },
+  prodRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  prodLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  prodValue: {
+    color: colors.textPrimary,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  barOuter: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  barInner: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: "rgba(34,197,94,0.55)",
+  },
+  prodHint: {
+    marginTop: 8,
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  sleepBtnLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8 as any,
+  },
+  sleepEmoji: {
+    fontSize: 16,
+  },
+  sleepBtnText: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  sleepBtnRight: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  heroSmall: {
+    marginTop: 4,
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  heroCardTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10 as any,
+  },
+  
+  sectionHeader: {
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  sectionTitle: {
+    color: colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  sectionSubtitle: {
+    marginTop: 4,
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: "600",
+  }
 });

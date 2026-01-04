@@ -20,6 +20,7 @@ export type Block = {
   // 🧠 NEW — classification system
   classification: "productive" | "neutral" | "unproductive";
   goalAlignment: "strong" | "partial" | "none";
+  habit_id: string | null
 };
 
 
@@ -41,6 +42,14 @@ export function getBlockState(block: Block, now = Date.now()) {
   if (now >= start && now < end) return "active";
   if (now >= end) return "missed";
   return "upcoming";
+}
+
+export function didCompletePlannedHabit(block: Block) {
+  return (
+    block.habit_id !== null &&
+    block.categoryId !== null &&
+    block.habit_id === block.categoryId
+  );
 }
 
 
@@ -137,18 +146,11 @@ export async function loadPersistedTimeBlocks(userId: string) {
 
 export function getCurrentBlockIndex(blocks: Block[]): number | null {
   const now = new Date();
-  console.log("NOW:", now.toISOString());
+
 
   blocks.forEach((block, i) => {
     const start = new Date(block.startTime);
     const end = new Date(block.endTime);
-
-    console.log(
-      i,
-      "start:", start.toISOString?.() ?? start,
-      "end:", end.toISOString?.() ?? end,
-      "match:", now >= start && now < end
-    );
   });
 
   const index = blocks.findIndex(block => {

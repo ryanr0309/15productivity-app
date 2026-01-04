@@ -9,7 +9,7 @@ export default function ImpactScreen() {
   function handleContinue() {
     if (!impact) return;
 
-    console.log("Impact:", impact);
+ 
 
     // TODO: save to Supabase later
     router.push("/(onboarding)/frequency");

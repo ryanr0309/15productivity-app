@@ -9,8 +9,6 @@ export default function GoalScreen() {
   function handleContinue() {
     if (!goal) return;
 
-    console.log("Goal:", goal);
-
     // TODO: save to Supabase later
     router.push("/(onboarding)/challenge");
   }

@@ -23,7 +23,7 @@ const DEFAULT_CATEGORIES = [
 export default function OnboardingCategoriesScreen() {
   /* ---------- AUTH ---------- */
   const authUser = useAuthStore((s) => s.user);
-   console.log("USER ID:", authUser);
+ 
 
   if (!authUser) {
     return (

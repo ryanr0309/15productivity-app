@@ -16,11 +16,11 @@ export function useCategories() {
   
       try {
         const data = await fetchCategories(auth.user.id);
-        console.log("FETCHED CATEGORIES", data);
+ 
   
         setCategories(data ?? []);
       } catch (err) {
-        console.error("Failed to fetch categories", err);
+ 
         setCategories([]);
       }
     }

@@ -7,9 +7,7 @@ export default function LogoutButton() {
   async function handleLogout() {
     const { error } = await supabase.auth.signOut();
 
-    console.log("LOGOUT ERROR:", error);
-    // ✅ DO NOT navigate here
-    // index.tsx will handle redirect automatically
+
    
     router.replace("/(auth)/login");
   }

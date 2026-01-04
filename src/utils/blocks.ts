@@ -24,11 +24,10 @@ export function getCurrentBlock(blocks: Block[]) {
 }
 
 
-
 export function normalizeBlocks(rows: any[]): Block[] {
   return rows.map((row) => {
-    const startISO = row.start_time; // ISO string
-    const endISO = row.end_time;     // ISO string
+    const startISO = row.start_time;
+    const endISO = row.end_time;
 
     const startDate = new Date(startISO);
     const endDate = new Date(endISO);
@@ -36,51 +35,104 @@ export function normalizeBlocks(rows: any[]): Block[] {
     return {
       id: row.id,
 
-      // 🔑 LOGIC (Dates)
+      // LOGIC
       startTime: startDate,
       endTime: endDate,
 
-      // 🔑 UI ONLY
+      // UI
       timeLabel: `${formatTime(startISO)} – ${formatTime(endISO)}`,
 
       completed: row.status === "logged",
-      categoryId: row.category_id ?? null,
-      description: row.description ?? "",
 
+      // 🔑 BOTH INTENT + REALITY
+      categoryId: row.category_id ?? null,
+      habit_id: row.habit_id ?? null, // ✅ THIS FIXES EVERYTHING
+
+      description: row.description ?? "",
       classification: row.classification ?? "neutral",
       goalAlignment: row.goal_alignment ?? "none",
     };
   });
 }
 
-
 export async function ensureTimeBlocksExist(day: any) {
-  const { data: existingBlocks } = await supabase
+
+
+  if (!day.start_time || !day.estimated_sleep_time) return;
+
+  const intervalMs = 15 * 60 * 1000;
+
+  // ─────────────────────────────────────────────
+  // 1️⃣ Resolve day start
+  // ─────────────────────────────────────────────
+  const dayStart = normalizeToInterval(
+    new Date(day.start_time),
+    15
+  );
+
+  if (isNaN(dayStart.getTime())) {
+    console.warn("Invalid day.start_time", day.start_time);
+    return;
+  }
+
+  // ─────────────────────────────────────────────
+  // 2️⃣ Resolve sleep as NEAREST occurrence
+  // ─────────────────────────────────────────────
+  const sleepInput = new Date(day.estimated_sleep_time);
+
+  if (isNaN(sleepInput.getTime())) {
+    console.warn("Invalid estimated_sleep_time", day.estimated_sleep_time);
+    return;
+  }
+
+  // Anchor sleep to SAME day as start_time
+  const resolvedSleep = new Date(dayStart);
+  resolvedSleep.setHours(
+    sleepInput.getHours(),
+    sleepInput.getMinutes(),
+    0,
+    0
+  );
+
+  // Roll forward ONLY if sleep is before or equal to wake
+  if (resolvedSleep <= dayStart) {
+    resolvedSleep.setDate(resolvedSleep.getDate() + 1);
+  }
+
+  // ─────────────────────────────────────────────
+  // 3️⃣ Fetch existing blocks
+  // ─────────────────────────────────────────────
+  const { data: existingBlocksRaw } = await supabase
     .from("time_blocks")
     .select("start_time, end_time")
     .eq("day_id", day.id)
     .order("start_time", { ascending: true });
 
-  const intervalMs = day.interval_minutes * 60 * 1000;
-  const now = Date.now();
+  const existingBlocks = existingBlocksRaw ?? [];
 
   let nextStart: Date;
 
-  if (existingBlocks && existingBlocks.length > 0) {
+  if (existingBlocks.length > 0) {
     nextStart = new Date(
       existingBlocks[existingBlocks.length - 1].end_time
     );
   } else {
-    nextStart = normalizeToInterval(
-      new Date(day.start_time),
-      day.interval_minutes
-    );
+    nextStart = dayStart;
   }
 
+  // ─────────────────────────────────────────────
+  // 4️⃣ Safety: nothing to generate
+  // ─────────────────────────────────────────────
+  if (nextStart >= resolvedSleep) {
+    return;
+  }
+
+  // ─────────────────────────────────────────────
+  // 5️⃣ Generate blocks (wake → sleep)
+  // ─────────────────────────────────────────────
   const blocksToInsert: any[] = [];
 
-  // ✅ Generate until one block PAST now
-  while (nextStart.getTime() < now + intervalMs) {
+  while (nextStart < resolvedSleep) {
     const start = new Date(nextStart);
     const end = new Date(start.getTime() + intervalMs);
 
@@ -94,9 +146,8 @@ export async function ensureTimeBlocksExist(day: any) {
     nextStart = end;
   }
 
-  // 🔥 THIS WAS MISSING
   if (blocksToInsert.length > 0) {
     await supabase.from("time_blocks").insert(blocksToInsert);
   }
-
 }
+

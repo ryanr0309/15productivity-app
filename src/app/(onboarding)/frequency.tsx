@@ -28,7 +28,7 @@ export default function FrequencyScreen() {
 
 
 async function handleContinue() {
-  console.log(intervalMinutes, userId);
+
   if (!intervalMinutes || !userId) return;
 
   const { error } = await supabase

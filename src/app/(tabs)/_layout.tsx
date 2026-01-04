@@ -13,12 +13,17 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarShowLabel: false,
         tabBarStyle: {
-          backgroundColor: "#0B0B0B",
+          backgroundColor: "#1C2541",
           borderTopWidth: 0,
+          elevation: 0, // Android shadow
           height: 90,
         },
         tabBarActiveTintColor: "#FFFFFF",
         tabBarInactiveTintColor: "#6B6B6B",
+        tabBarItemStyle: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
       }}
     >
       <Tabs.Screen
@@ -40,7 +45,7 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
-        name="coach"
+        name="lab"
         options={{
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="add-circle-outline" size={size + 4} color={color} />

@@ -1,19 +1,63 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "../lib/supabase";
-import { normalizeToInterval } from "../utils/time";
-import { ensureTimeBlocksExist, normalizeBlocks } from "../utils/blocks";
+import { normalizeBlocks } from "../utils/blocks";
 import { Block } from "../utils/timeBlocks";
 import { getCurrentBlockIndex as getCurrentBlockIndexUtil } from "../utils/timeBlocks";
-import { useRef } from "react";
+import { ensureTimeBlocksExist } from "../utils/blocks";
 
 export function useTimeBlocks(openDay: any | null) {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [dayReady, setDayReady] = useState(false);
   const loadedDayIdRef = useRef<string | null>(null);
+  const pendingSaveRef = useRef<Set<string>>(new Set());
+
 
   function getCurrentBlockIndex() {
-  return getCurrentBlockIndexUtil(blocks);
+    return getCurrentBlockIndexUtil(blocks);
+  }
+
+async function loadBlocks({ showSkeleton = false } = {}) {
+  if (!openDay?.id) return;
+
+  const isFirstLoadForDay =
+    loadedDayIdRef.current !== openDay.id;
+
+  if (showSkeleton || isFirstLoadForDay) {
+    setDayReady(false);
+  }
+
+  // 🔑 ENSURE blocks exist up to now
+  await ensureTimeBlocksExist(openDay);
+
+  const { data, error } = await supabase
+    .from("time_blocks")
+    .select("*")
+    .eq("day_id", openDay.id)
+    .order("start_time");
+
+  if (error) {
+    console.error("Failed to load time blocks", error);
+    setDayReady(true);
+    return;
+  }
+
+  setBlocks(prev => {
+    const incoming = normalizeBlocks(data ?? []);
+
+    return incoming.map(serverBlock => {
+      if (pendingSaveRef.current.has(serverBlock.id)) {
+        const local = prev.find(b => b.id === serverBlock.id);
+        return local ?? serverBlock;
+      }
+      return serverBlock;
+    });
+  });
+
+  loadedDayIdRef.current = openDay.id;
+  setDayReady(true);
 }
+
+
 
   async function saveTimeBlock({
     blockId,
@@ -24,22 +68,18 @@ export function useTimeBlocks(openDay: any | null) {
     categoryId: string | null;
     description: string;
   }) {
-    // 1️⃣ Optimistic update
+    pendingSaveRef.current.add(blockId);
+
+    // optimistic update
     setBlocks(prev =>
       prev.map(block =>
         block.id === blockId
-          ? {
-              ...block,
-              categoryId,
-              description,
-              completed: true,
-            }
+          ? { ...block, categoryId, description, completed: true }
           : block
       )
     );
 
-    // 2️⃣ Persist
-    await supabase
+    const { error } = await supabase
       .from("time_blocks")
       .update({
         category_id: categoryId,
@@ -47,46 +87,37 @@ export function useTimeBlocks(openDay: any | null) {
         status: "logged",
       })
       .eq("id", blockId);
+
+    if (error) {
+      console.error("Failed to save time block", error);
+      return;
+    }
+
+    supabase.functions.invoke("classify-time-block", {
+      body: { blockId },
+    });
   }
+
+  // initial + dependency-based load
+useEffect(() => {
+  loadBlocks({ showSkeleton: true });
+}, [openDay?.id, openDay?.estimated_sleep_time]);
 
 useEffect(() => {
-  if (!openDay) {
-    setBlocks([]);
-    setDayReady(false);
-    loadedDayIdRef.current = null;
-    return;
-  }
+  if (!openDay?.id) return;
 
-  // ✅ Blocks already loaded for this day → do nothing
-  if (loadedDayIdRef.current === openDay.id) {
-    return;
-  }
+  const interval = setInterval(() => {
+    loadBlocks({ showSkeleton: false });
+  }, 60_000); // every minute
 
-  async function loadBlocks() {
-    setDayReady(false);
-
-    await ensureTimeBlocksExist(openDay);
-
-    const { data } = await supabase
-      .from("time_blocks")
-      .select("*")
-      .eq("day_id", openDay.id)
-      .order("start_time");
-
-    setBlocks(normalizeBlocks(data ?? []));
-    setDayReady(true);
-
-    // 🔑 mark blocks as loaded for this day
-    loadedDayIdRef.current = openDay.id;
-  }
-
-  loadBlocks();
-}, [openDay]);
+  return () => clearInterval(interval);
+}, [openDay?.id]);
 
   return {
     blocks,
     dayReady,
     saveTimeBlock,
-    getCurrentBlockIndex // 👈 expose intent
+    getCurrentBlockIndex,
+    reloadTimeBlocks: () => loadBlocks({ showSkeleton: false }), // 🔑 THIS IS THE KEY
   };
 }

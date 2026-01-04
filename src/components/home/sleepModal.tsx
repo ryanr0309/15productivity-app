@@ -130,15 +130,7 @@ const canSleepNow = new Date() >= earliestSleepTime;
 
 
   return (
-    <Modal
-      isVisible={visible}
-      onBackdropPress={onClose}
-      onSwipeComplete={onClose}
-      swipeDirection="down"
-      avoidKeyboard
-      onModalHide={onHidden}
-      style={styles.modal}
-    >
+
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
@@ -146,7 +138,6 @@ const canSleepNow = new Date() >= earliestSleepTime;
           contentContainerStyle={styles.sheetContainer}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.container}>
             {/* Handle */}
             <View style={styles.handle} />
 
@@ -190,7 +181,7 @@ const canSleepNow = new Date() >= earliestSleepTime;
               style={styles.timeRow}
               onPress={() => setCustomTime(new Date())}
             >
-              <Text style={styles.label}>Sleep time</Text>
+              <Text style={styles.label}>Tap to select sleep time</Text>
               <Text style={styles.time}>
                 {(customTime ?? new Date()).toLocaleTimeString([], {
                   hour: "numeric",
@@ -269,10 +260,9 @@ const canSleepNow = new Date() >= earliestSleepTime;
 
               </>
             )}
-          </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </Modal>
+ 
   );
 }
 
@@ -303,34 +293,33 @@ function ToggleOption({
 
 
 const styles = StyleSheet.create({
-  modal: {
-    justifyContent: "flex-end",
-    margin: 0,
-  },
+  
 
-  container: {
-    backgroundColor: "#1E2A4A",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 24,
+  sheetContainer: {
+  backgroundColor: "#1E2433",
+  borderRadius: 20,
+  paddingHorizontal: 18,
+  paddingTop: 12,
+  paddingBottom: 48,
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.06)",
   },
 
   handle: {
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#6B7280",
+    backgroundColor: "rgba(255,255,255,0.25)",
     alignSelf: "center",
-    marginBottom: 12,
+    marginBottom: 14,
   },
 
+  /* HEADER */
   header: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginBottom: 16,
+    marginBottom: 18,
   },
 
   title: {
@@ -339,13 +328,19 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
+  subtitle: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 13,
+    marginTop: 2,
+  },
+
+  /* PRIMARY ACTION */
   primaryButton: {
     backgroundColor: "#4DA3FF",
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",
-    marginTop: 12,
-    marginBottom: 48
+    marginTop: 16,
   },
 
   primaryText: {
@@ -354,12 +349,19 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  or: {
-    textAlign: "center",
-    color: "#B0B8D4",
-    marginVertical: 12,
+  disabledButton: {
+    opacity: 0.4,
   },
 
+  /* DIVIDER */
+  or: {
+    textAlign: "center",
+    color: "rgba(255,255,255,0.5)",
+    marginVertical: 12,
+    fontSize: 13,
+  },
+
+  /* TIME ROW */
   timeRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -368,7 +370,7 @@ const styles = StyleSheet.create({
   },
 
   label: {
-    color: "#B0B8D4",
+    color: "rgba(255,255,255,0.7)",
     fontSize: 14,
   },
 
@@ -377,66 +379,52 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
   },
-  sheetContainer: {
-  borderRadius: 20,
-  paddingHorizontal: 16,
-  paddingTop: 12,
-  paddingBottom: 12, // 🔽 REDUCED from large value
-  maxHeight: "85%",
-},
-toggleGroup: {
-  marginTop: 12,
-  marginBottom: 12,
-},
 
-toggleOption: {
-  flexDirection: "row",
-  alignItems: "center",
-  paddingVertical: 8,
-},
+  /* TOGGLE GROUP */
+  toggleGroup: {
+    marginTop: 12,
+    marginBottom: 12,
+  },
 
-toggleSelected: {
-  opacity: 1,
-},
+  toggleOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+  },
 
-toggleText: {
-  color: "#FFFFFF",
-  fontSize: 14,
-  marginLeft: 10,
-},
+  toggleText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    marginLeft: 10,
+  },
 
-radioOuter: {
-  width: 18,
-  height: 18,
-  borderRadius: 9,
-  borderWidth: 2,
-  borderColor: "#4DA3FF",
-  alignItems: "center",
-  justifyContent: "center",
-},
+  radioOuter: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: "#4DA3FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
-radioInner: {
-  width: 8,
-  height: 8,
-  borderRadius: 4,
-  backgroundColor: "#4DA3FF",
-},
+  radioInner: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#4DA3FF",
+  },
 
-subtitle: {
-  color: "#B0B8D4",
-  fontSize: 13,
-  marginTop: 2,
-},
-disabledButton: {
-  opacity: 0.4,
-},
+  /* HELPER */
+  helper: {
+    color: "rgba(255,255,255,0.5)",
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: "center",
+  },
 
-helper: {
-  color: "#B0B8D4",
-  fontSize: 13,
-  marginTop: 8,
-  textAlign: "center",
-},
-
-
+  toggleSelected: {
+    opacity: 1
+  }
 });
+

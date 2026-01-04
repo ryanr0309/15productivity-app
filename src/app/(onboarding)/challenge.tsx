@@ -9,7 +9,7 @@ export default function ChallengeScreen() {
   function handleContinue() {
     if (!challenge) return;
 
-    console.log("Challenge:", challenge);
+
 
     // TODO: save to Supabase later
     router.push("/(onboarding)/impact");

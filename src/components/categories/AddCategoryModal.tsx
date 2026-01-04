@@ -66,7 +66,6 @@ const handleSave = () => {
   onBackButtonPress={onClose}
   style={{ margin: 0, justifyContent: "center" }}
 >
-      <View style={styles.overlay}>
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.header}>
@@ -106,57 +105,69 @@ const handleSave = () => {
             <Text style={styles.saveText}>Add Category</Text>
           </TouchableOpacity>
         </View>
-      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    padding: 20,
-  },
   container: {
-    backgroundColor: "#0F172A",
+    backgroundColor: "#1E2433",
     borderRadius: 20,
-    padding: 20,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+    marginHorizontal: 20,
   },
+
+  /* HEADER */
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 14,
   },
+
   title: {
     color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "600",
   },
+
+  /* SECTION LABELS */
   label: {
-    color: "#CBD5F5",
-    fontSize: 14,
+    color: "rgba(255,255,255,0.75)",
+    fontSize: 13,
+    fontWeight: "600",
     marginBottom: 8,
     marginTop: 16,
   },
+
+  /* INPUT */
   input: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderRadius: 12,
+    backgroundColor: "#252B3A",
+    borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
     color: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
+
+  /* PRIMARY ACTION */
   saveButton: {
     backgroundColor: "#4DA3FF",
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",
-    marginTop: 24,
+    marginTop: 22,
   },
+
   saveText: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
   },
 });
+

@@ -17,6 +17,10 @@ import { Block } from "../../utils/timeBlocks";
 import { toClassifiedBlock } from "../../lib/adapters/toClassifiedBlock";
 import { normalizeCategoryBreakdown, normalizeOutcomeBreakdown } from "../../lib/analytics/normalizeBreakdown";
 import { Category } from "../../constants/categories";
+import { findBestFocusWindow } from "../../lib/analytics/focusWindow";
+import { findMostUnproductiveWindow } from "../../lib/analytics/unproductiveWindow";
+import DailySummaryCard from "../../components/insights/DailySummary";
+import { formatDateRange, formatDateTime } from "../../utils/time";
 
 export default function Insights() {
   /** ---------------- STATE ---------------- */
@@ -25,6 +29,10 @@ export default function Insights() {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [report, setReport] = useState<any | null>(null);
+  
+
+  
 
   useEffect(() => {
   async function loadCategories() {
@@ -64,6 +72,7 @@ const categoryMap: Record<
         .select("*")
         .order("start_time", { ascending: true });
 
+        
       if (!data || data.length === 0) {
         setDays([]);
         setLoading(false);
@@ -73,6 +82,8 @@ const categoryMap: Record<
       setDays(data);
       setSelectedIndex(data.length - 1); // default → latest day
       setLoading(false);
+
+      
     }
 
     loadDays();
@@ -84,7 +95,16 @@ const categoryMap: Record<
       if (!days.length) return;
 
       const selectedDay = days[selectedIndex];
+    
       if (!selectedDay) return;
+
+      const { data: report } = await supabase
+  .from("daily_reports")
+  .select("*")
+  .eq("day_id", selectedDay.id)
+  .single();
+
+      setReport(report)
 
       const { data } = await supabase
         .from("time_blocks")
@@ -98,9 +118,37 @@ const categoryMap: Record<
     loadBlocks();
   }, [days, selectedIndex]);
 
+  function formatWindow(window: {
+  start: Date;
+  end: Date;
+}) {
+  const start = window.start.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  const end = window.end.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  return `${start} – ${end}`;
+}
+
+function formatTime(date: Date) {
+  return date.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+
   /** ---------------- DERIVED DATA ---------------- */
 
 const classifiedBlocks = blocks.map(toClassifiedBlock);
+
+const bestFocusWindow =
+  findBestFocusWindow(classifiedBlocks);
 const dayScore = scoreDay(classifiedBlocks);
 const outcomeBreakdown =
   breakdownByOutcome(classifiedBlocks);
@@ -122,8 +170,19 @@ const categoryBreakdown =
     : categoryBarData
 
 
+    const selectedDay = days[selectedIndex];
+    const rangeText = selectedDay
+  ? formatDateRange(
+      new Date(selectedDay.start_time),
+      new Date(selectedDay.end_time)
+    )
+  : "";
+
   const blocksCompleted = blocks.filter(b => b.completed).length;
   const blocksMissed = blocks.length - blocksCompleted;
+  
+const worstWindow =
+  findMostUnproductiveWindow(classifiedBlocks);
 
   /** ---------------- GUARDS ---------------- */
   if (loading) {
@@ -148,9 +207,9 @@ const categoryBreakdown =
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* HEADER */}
         <View style={styles.header}>
-          <Ionicons name="analytics-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.headerText}>Insights</Text>
-        </View>
+                  <Ionicons name="time-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.headerText}>15 Productivity</Text>
+                </View>
 
         {/* DAY STRIP */}
         <DateStrip
@@ -158,6 +217,9 @@ const categoryBreakdown =
           selectedIndex={selectedIndex}
           onSelectIndex={setSelectedIndex}
         />
+        <Text style={styles.dateRange}>
+  {rangeText}
+</Text>
 
         {/* PRODUCTIVITY SCORE */}
         <View style={styles.heroCard}>
@@ -182,15 +244,26 @@ const categoryBreakdown =
         <View style={styles.gridRow}>
           <View style={styles.halfCard}>
             <Text style={styles.cardLabel}>Best focus window</Text>
-            <Text style={styles.timeText}>—</Text>
+            <Text style={styles.timeText}>
+  {bestFocusWindow
+    ? formatWindow(bestFocusWindow)
+    : "No sustained focus"}
+</Text>
+
             <Text style={styles.cardSubtext}>
               Based on productive block density.
             </Text>
           </View>
 
           <View style={styles.halfCard}>
-            <Text style={styles.cardLabel}>Drop-off point</Text>
-            <Text style={styles.timeText}>—</Text>
+            <Text style={styles.cardLabel}>Unproductive window</Text>
+            <Text style={styles.timeText}>
+  {worstWindow
+    ? formatWindow(worstWindow)
+    : "No unproductive time"}
+</Text>
+
+
             <Text style={styles.cardSubtext}>
               Based on unproductive clustering.
             </Text>
@@ -198,7 +271,12 @@ const categoryBreakdown =
         </View>
 
         {/* TRY TOMORROW */}
-        <TryTomorrowCard items={[]} />
+        {report?.try_tomorrow && (
+  <TryTomorrowCard items={report.try_tomorrow} />
+)}
+
+{report?.ai_summary && (<DailySummaryCard summary={report.ai_summary}/>)}
+  
       </ScrollView>
     </LinearGradient>
   );
@@ -267,4 +345,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 40,
   },
+  dateRange: {
+  marginTop: 6,
+  marginBottom: 12,
+  textAlign: "center",
+  color: colors.textSecondary,
+  fontSize: 12,
+},
+
 });

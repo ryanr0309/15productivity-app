@@ -86,3 +86,18 @@ export function formatRemaining(ms: number) {
 
   return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
 }
+
+export function formatDateTime(date: Date) {
+  return date.toLocaleString([], {
+    month: "2-digit",
+    day: "2-digit",
+    year: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+export function formatDateRange(start: Date, end: Date) {
+  return `${formatDateTime(start)} - ${formatDateTime(end)}`;
+}

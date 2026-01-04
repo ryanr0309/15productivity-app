@@ -13,15 +13,15 @@ export function useCooldown(){
   }
 
     async function loadCooldown() {
-      console.log("COOLDOWN EFFECT RUNNING");
+
     
       const { data: auth } = await supabase.auth.getUser();
       if (!auth?.user) {
-        console.log("COOLDOWN: NO AUTH USER");
+    
         return;
       }
     
-        console.log("COOLDOWN USER READY:", auth.user.id);
+      
     
         const { data: day } = await supabase
           .from("days")
@@ -32,7 +32,7 @@ export function useCooldown(){
           .limit(1)
           .maybeSingle();
     
-        console.log("COOLDOWN QUERY RESULT:", day);
+      
     
         if (!day?.end_time) {
           setCooldownEnd(null);
