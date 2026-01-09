@@ -42,8 +42,8 @@ export default function DateStrip({
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 16,
     gap: 8,
+    paddingRight: 24
   },
   dayItem: {
     paddingVertical: 10,
@@ -52,8 +52,10 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.06)",
   },
   activeItem: {
-    backgroundColor: colors.accent,
-  },
+  backgroundColor: colors.accent,
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.2)",
+},
   dayText: {
     color: colors.textSecondary,
     fontSize: 14,

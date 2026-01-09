@@ -43,38 +43,26 @@ export function normalizeOutcomeBreakdown(
 /* ---------- CATEGORY NORMALIZER ---------- */
 
 export function normalizeCategoryBreakdown(
-  breakdown: Record<string, number>,
-  categoryMap: Record<string, { label: string; color: string }>
-): TimeDistributionItem[] {
-  const sorted = Object.entries(breakdown)
-    .sort((a, b) => b[1] - a[1]);
-
-  const top4 = sorted.slice(0, 4);
-  const rest = sorted.slice(4);
-
-  const result: TimeDistributionItem[] = top4.map(
-    ([categoryId, minutes]) => ({
-      id: categoryId, // 👈 UNIQUE
-      label: categoryMap[categoryId]?.label ?? "Uncategorized",
-      minutes,
-      color: categoryMap[categoryId]?.color ?? "#6B7280",
-    })
-  );
-
-  const otherMinutes = rest.reduce(
-    (sum, [, minutes]) => sum + minutes,
+  breakdown: {
+    label: string;
+    color: string;
+    minutes: number;
+  }[]
+) {
+  const totalMinutes = breakdown.reduce(
+    (sum, item) => sum + item.minutes,
     0
   );
 
-  if (otherMinutes > 0) {
-    result.push({
-      id: "__other__", // 👈 GUARANTEED UNIQUE
-      label: "Other",
-      minutes: otherMinutes,
-      color: "#6B7280",
-    });
-  }
-
-  return result;
+  return breakdown.map(item => ({
+    label: item.label,
+    minutes: item.minutes,
+    color: item.color,
+    percent:
+      totalMinutes > 0
+        ? Math.round((item.minutes / totalMinutes) * 100)
+        : 0,
+  }));
 }
+
 

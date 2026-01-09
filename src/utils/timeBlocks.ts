@@ -16,6 +16,10 @@ export type Block = {
   completed: boolean;
   categoryId: string | null;
   description: string;
+  edit_count: number;
+  categoryLabel: string | null;
+  categoryColor: string | null;
+
 
   // 🧠 NEW — classification system
   classification: "productive" | "neutral" | "unproductive";

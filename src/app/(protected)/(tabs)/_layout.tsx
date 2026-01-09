@@ -3,6 +3,7 @@
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
+import { colors } from "../../../constants/colors";
 
 
 export default function TabsLayout() {
@@ -11,19 +12,37 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: false,
+        tabBarShowLabel: true,
+        freezeOnBlur: true,
+        lazy: false,
+
         tabBarStyle: {
-          backgroundColor: "#1C2541",
-          borderTopWidth: 0,
-          elevation: 0, // Android shadow
-          height: 90,
-        },
+  backgroundColor: colors.background,
+  borderTopWidth: 0,
+  elevation: 0,
+  height: 80,
+  paddingBottom: 8,
+  paddingTop: 6,
+},
+tabBarLabelStyle: {
+  fontSize: 11,
+  fontWeight: "600",
+  marginTop: 2,
+},
+tabBarItemStyle: {
+  justifyContent: "center",
+  alignItems: "center",
+  borderRadius: 16,
+},
+
+tabBarActiveBackgroundColor: "rgba(255,255,255,0.08)",
+
+
+
+
         tabBarActiveTintColor: "#FFFFFF",
         tabBarInactiveTintColor: "#6B6B6B",
-        tabBarItemStyle: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
+        
       }}
     >
       <Tabs.Screen

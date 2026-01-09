@@ -11,9 +11,10 @@ import {
   Keyboard
 } from "react-native";
 import { colors } from "../../constants/colors";
-import { Category } from "../../constants/categories";
 import CategoryPill from "../../components/CategoryPill";
 import AddCategoryModal from "../categories/AddCategoryModal";
+import { Category } from "../../constants/categories";
+import { useData } from "../../providers/DataProvider";
 
 
 type Props = {
@@ -24,7 +25,8 @@ type Props = {
   initialCategoryId: string | null;
   initialDescription: string;
 
-  categories: Category[];
+  editCount: number
+
   onAddCategory: (category: Category) => void;
   onDeleteCategory: (categoryId: string) => void;
 
@@ -32,6 +34,8 @@ type Props = {
     blockId: string;
     categoryId: string;
     description: string;
+    categoryLabel: string;
+    categoryColor: string
   }) => void;
 
   onClose: () => void;
@@ -44,54 +48,74 @@ export default function TimeBlockModal({
   dateLabel,
   initialCategoryId,
   initialDescription,
-  categories,
+  editCount,
   onAddCategory,
   onDeleteCategory,
   onSave,
   onClose, // ✅ ADD THIS
 }: Props) {
 
+  const isLocked = editCount >= 2;
+  const canEdit = editCount < 2
+  ;
   const MIN_DESCRIPTION_LENGTH = 8;
   const MAX_DESCRIPTION_LENGTH = 160;
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
     null
   );
-  const [description, setDescription] = useState("");
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
 
   const safeInitialDescription = (initialDescription ?? "");
+  const { habits, categories} = useData();
+
+  
+  const [description, setDescription] =
+  useState(safeInitialDescription);
+  
 
   const isEditing =
   Boolean(initialCategoryId) || safeInitialDescription.trim().length > 0;
 
+const trimmedDescription = (description ?? "").trim();
 
-  const trimmedDescription = (description ?? "").trim();
+const hasChanges =
+  selectedCategoryId !== initialCategoryId ||
+  trimmedDescription !== safeInitialDescription.trim();
 
 
-  const canSave =
+const canSave =
+  canEdit &&
+  hasChanges &&
   selectedCategoryId !== null &&
   trimmedDescription.length >= MIN_DESCRIPTION_LENGTH &&
   trimmedDescription.length <= MAX_DESCRIPTION_LENGTH;
 
-
-
 useEffect(() => {
   setSelectedCategoryId(initialCategoryId);
   setDescription(safeInitialDescription);
-}, [initialCategoryId, safeInitialDescription]);
+}, [initialCategoryId, safeInitialDescription, blockId]);
 
 
 function handleSave() {
   if (!selectedCategoryId) return;
 
+  const category = categories.find(
+    c => c.id === selectedCategoryId
+  );
+
+  if (!category) return;
+
   onSave({
     blockId,
-    categoryId: selectedCategoryId,
+    categoryId: category.id,          // optional, but useful
+    categoryLabel: category.label,    // 🔒 SNAPSHOT
+    categoryColor: category.color,    // 🔒 SNAPSHOT
     description,
   });
 
   onClose();
 }
+
 
 function handleDeleteCategoryLocal(categoryId: string) {
   // 🔑 Clear local selection first
@@ -125,20 +149,31 @@ function handleDeleteCategoryLocal(categoryId: string) {
       <View style={styles.pillRow}>
         {categories.map((category) => (
           <CategoryPill
-            key={category.id}
-            category={category}
-            selected={category.id === selectedCategoryId}
-            onPress={() => setSelectedCategoryId(category.id)}
-            onDelete={() => handleDeleteCategoryLocal(category.id)}
-          />
+  key={category.id}
+  category={category}
+  selected={category.id === selectedCategoryId}
+  onPress={() => canEdit && setSelectedCategoryId(category.id)}
+  onDelete={
+  !isLocked
+    ? () => handleDeleteCategoryLocal(category.id)
+    : undefined
+}
+
+/>
+
         ))}
 
         <Pressable
-          onPress={() => setIsAddCategoryOpen(true)}
-          style={[styles.pill, styles.addPill]}
-        >
-          <Text style={styles.addPillText}>＋</Text>
-        </Pressable>
+  disabled={!canEdit}
+  onPress={() => setIsAddCategoryOpen(true)}
+  style={[
+    styles.pill,
+    styles.addPill,
+    !canEdit && styles.disabled,
+  ]}
+>
+  <Text style={styles.addPillText}>＋</Text>
+</Pressable>
       </View>
 
       {/* DESCRIPTION SECTION */}
@@ -149,7 +184,10 @@ function handleDeleteCategoryLocal(categoryId: string) {
   onChangeText={setDescription}
   placeholder="What did you work on?"
   placeholderTextColor={colors.textSecondary}
-  style={styles.input}
+  style={[
+    styles.input,
+    !canEdit && styles.inputDisabled,
+  ]}
   maxLength={MAX_DESCRIPTION_LENGTH}
   multiline={true}   
   numberOfLines={4}
@@ -161,30 +199,37 @@ function handleDeleteCategoryLocal(categoryId: string) {
 />
 
 
-      <Text style={styles.helper}>
-  {trimmedDescription.length === 0
-    ? "Be specific — this helps your daily insights."
-    : trimmedDescription.length < MIN_DESCRIPTION_LENGTH
-    ? `Add ${MIN_DESCRIPTION_LENGTH - trimmedDescription.length} more characters`
-    : trimmedDescription.length > MAX_DESCRIPTION_LENGTH
-    ? "Description is too long"
-    : "Edits won’t affect your productivity score"}
-</Text>
+{isLocked ? (
+  <Text style={styles.helper}>
+    This time block has reached its edit limit and is now locked.
 
+  </Text>
+) : (
+  <Text style={styles.helper}>
+    {trimmedDescription.length === 0
+      ? "Be specific — this helps your daily insights."
+      : trimmedDescription.length < MIN_DESCRIPTION_LENGTH
+      ? `Add ${MIN_DESCRIPTION_LENGTH - trimmedDescription.length} more characters`
+      : trimmedDescription.length > MAX_DESCRIPTION_LENGTH
+      ? "Description is too long"
+      : "You are allowed one edit per time block"}
+  </Text>
+)}
 
       {/* SAVE BUTTON */}
       <Pressable
-        onPress={handleSave}
-        disabled={!canSave}
-        style={[
-          styles.saveButton,
-          !canSave && styles.saveButtonDisabled,
-        ]}
-      >
-        <Text style={styles.saveText}>
-          {isEditing ? "Update" : "Log"}
-        </Text>
-      </Pressable>
+  onPress={handleSave}
+  disabled={!canSave}
+  style={[
+    styles.saveButton,
+    !canSave && styles.saveButtonDisabled,
+  ]}
+>
+  <Text style={styles.saveText}>
+    {!canEdit ? "Locked" : isEditing ? "Update" : "Log"}
+  </Text>
+</Pressable>
+
 
       
 
@@ -193,6 +238,7 @@ function handleDeleteCategoryLocal(categoryId: string) {
   visible={isAddCategoryOpen}
   onClose={() => setIsAddCategoryOpen(false)}
   categories={categories}
+  habits={habits}
   onCreate={(category) => {
     onAddCategory(category);
     setIsAddCategoryOpen(false);
@@ -308,4 +354,20 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 16,
   },
+  inputDisabled: {
+  opacity: 0.6,
+},
+
+disabled: {
+  opacity: 0.4,
+},
+
+lockedHint: {
+  color: colors.textSecondary,
+  fontSize: 12,
+  fontStyle: "italic",
+  marginBottom: 12,
+  textAlign: "center",
+},
+
 });

@@ -8,39 +8,60 @@ import {
   StyleSheet,
 } from "react-native";
 import { CATEGORY_COLORS } from "../../constants/categoryColors";
+import ColorPicker from "../ColorPicker";
+import { Category } from "../../constants/categories";
+import { Habit } from "../../constants/habits";
+
 
 type Props = {
   visible: boolean;
-  initialName?: string;
-  initialColor?: string;
   onClose: () => void;
   onSave: (name: string, color: string) => Promise<void>;
+
+  categories: Category[];
+  habits: Habit[];
 };
 
-export default function AddEditHabitModal({
+
+export default function AddHabitModal({
   visible,
-  initialName,
-  initialColor,
   onClose,
   onSave,
+  categories,
+  habits,
 }: Props) {
   const [name, setName] = useState("");
-  const [color, setColor] = useState(CATEGORY_COLORS[0]);
+  const [selectedColor, setSelectedColor] =
+    useState<string | null>(null);
+
+  const usedColors = [
+    ...categories.map(c => c.color),
+    ...habits.map(h => h.color),
+  ];
 
   useEffect(() => {
-    if (visible) {
-      setName(initialName ?? "");
-      setColor(initialColor ?? CATEGORY_COLORS[0]);
-    }
-  }, [visible, initialName, initialColor]);
+    if (!visible) return;
+
+    setName("");
+
+    const firstAvailable = CATEGORY_COLORS.find(
+      c => !usedColors.includes(c)
+    );
+
+    setSelectedColor(firstAvailable ?? null);
+  }, [visible, usedColors]);
+
+  async function handleSave() {
+    if (!name.trim() || !selectedColor) return;
+    await onSave(name.trim(), selectedColor);
+    onClose();
+  }
 
   return (
     <Modal transparent animationType="fade" visible={visible}>
       <View style={styles.overlay}>
         <View style={styles.card}>
-          <Text style={styles.title}>
-            {initialName ? "Edit Habit" : "New Habit"}
-          </Text>
+          <Text style={styles.title}>New Habit</Text>
 
           <TextInput
             value={name}
@@ -48,23 +69,16 @@ export default function AddEditHabitModal({
             placeholder="Habit name"
             placeholderTextColor="#6B7280"
             style={styles.input}
+            autoFocus
           />
 
           <Text style={styles.label}>Color</Text>
 
-          <View style={styles.colorGrid}>
-            {CATEGORY_COLORS.map(c => (
-              <Pressable
-                key={c}
-                onPress={() => setColor(c)}
-                style={[
-                  styles.colorDot,
-                  { backgroundColor: c },
-                  color === c && styles.selected,
-                ]}
-              />
-            ))}
-          </View>
+          <ColorPicker
+            selectedColor={selectedColor}
+            usedColors={usedColors}
+            onSelect={setSelectedColor}
+          />
 
           <View style={styles.actions}>
             <Pressable onPress={onClose}>
@@ -72,10 +86,18 @@ export default function AddEditHabitModal({
             </Pressable>
 
             <Pressable
-              onPress={() => onSave(name.trim(), color)}
-              disabled={!name.trim()}
+              onPress={handleSave}
+              disabled={!name.trim() || !selectedColor}
             >
-              <Text style={styles.save}>Save</Text>
+              <Text
+                style={[
+                  styles.save,
+                  (!name.trim() || !selectedColor) &&
+                    styles.saveDisabled,
+                ]}
+              >
+                Create
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -84,6 +106,7 @@ export default function AddEditHabitModal({
   );
 }
 
+
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -91,56 +114,75 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   card: {
     width: "90%",
     backgroundColor: "#0F172A",
     borderRadius: 16,
     padding: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
   },
+
   title: {
     color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "600",
-    marginBottom: 12,
+    marginBottom: 14,
   },
+
   input: {
     backgroundColor: "#020617",
     color: "#FFFFFF",
     borderRadius: 10,
     padding: 12,
-    marginBottom: 16,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
+
   label: {
     color: "#94A3B8",
     fontSize: 13,
     marginBottom: 8,
   },
+
   colorGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 24,
   },
+
   colorDot: {
     width: 28,
     height: 28,
     borderRadius: 14,
   },
+
   selected: {
     borderWidth: 3,
     borderColor: "#FFFFFF",
   },
+
   actions: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
   },
+
   cancel: {
     color: "#9CA3AF",
     fontSize: 15,
   },
+
   save: {
     color: "#38BDF8",
     fontSize: 15,
     fontWeight: "700",
+  },
+
+  saveDisabled: {
+    opacity: 0.4,
   },
 });

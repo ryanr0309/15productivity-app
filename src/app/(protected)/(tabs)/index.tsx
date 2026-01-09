@@ -1,31 +1,37 @@
 
 import React, { useEffect, useRef, useState } from "react";
+import { useScrollToTop } from "@react-navigation/native";
+import { useData } from "../../../providers/DataProvider";
+import { useAuth } from "../../../hooks/useAuth";
 import {View,Text,StyleSheet,ScrollView,Pressable, Platform, FlatList} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { supabase } from "../../lib/supabase";
+import { supabase } from "../../../lib/supabase";
 import Modal from "react-native-modal";
-import CooldownScreen from "../../components/home/cooldown";
-import { formatTime } from "../../utils/time";
-import {getCurrentBlock,getCurrentBlockIndex} from "../../utils/blocks";
+import CooldownScreen from "../../../components/home/cooldown";
+import { formatTime } from "../../../utils/time";
+import {getCurrentBlock,getCurrentBlockIndex} from "../../../utils/blocks";
 import { useFocusEffect } from "expo-router";
 import { useCallback } from "react";
-import TimeBlockCard from "../../components/time-block/TimeBlockCard";
-import TimeBlockModal from "../../components/time-block/TimeBlockModal";
-import SleepModal from "../../components/home/sleepModal";
-import { closeOpenDay } from "../../lib/days";
-import StartDayScreen from "../../components/home/startday";
-import DailyGoalsModal from "../../components/config/DailyGoalsModal";
-import HomeSkeleton from "../../components/home/HomeSkeleton"
-import { useCategories } from "../../services/useCategories";
-import { useOpenDay } from "../../services/useOpenDay";
-import { useCooldown } from "../../services/useCooldown";
-import { useTimeBlocks } from "../../services/useTimeBlocks";
-import { formatRemaining } from "../../utils/time";
-import { ContextPill } from "../../components/home/contextPill";
-import DayUnlockFlow from "../../components/day-unlock/DayUnlockFlow";
-import { Habit } from "../../constants/habits";
+import TimeBlockCard from "../../../components/time-block/TimeBlockCard";
+import TimeBlockModal from "../../../components/time-block/TimeBlockModal";
+import SleepModal from "../../../components/home/sleepModal";
+import { closeOpenDay } from "../../../lib/days";
+import StartDayScreen from "../../../components/home/startday";
+import DailyGoalsModal from "../../../components/config/DailyGoalsModal";
+import HomeSkeleton from "../../../components/home/HomeSkeleton"
+import { useOpenDay } from "../../../services/useOpenDay";
+import { useCooldown } from "../../../services/useCooldown";
+import { useTimeBlocks } from "../../../services/useTimeBlocks";
+import { formatRemaining } from "../../../utils/time";
+import { ContextPill } from "../../../components/home/contextPill";
+import DayUnlockFlow from "../../../components/day-unlock/DayUnlockFlow";
+import { Habit } from "../../../constants/habits";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { Block } from "../../../utils/timeBlocks";
+import { closeDay } from "../../../utils/dayLifecycle";
+
+
 const colors = {
   background: "#0B1224",
   card: "rgba(255,255,255,0.06)",
@@ -48,70 +54,124 @@ const colors = {
 export default function Home() {
   const {MIN_AWAKE_HOURS, COOLDOWN_HOURS, cooldownEnd, cooldownChecked, loadCooldown, getEarliestSleepTime} = useCooldown()
   const [isSleepModalOpen, setIsSleepModalOpen] = useState(false);
-  const { openDay, openDayChecked, reloadOpenDay } = useOpenDay();
-  const { blocks, dayReady, saveTimeBlock, getCurrentBlockIndex, reloadTimeBlocks } = useTimeBlocks(openDay);
+  const {
+  openDay,
+  openDayChecked,
+  reloadOpenDay,
+  categories,
+  addCategory,
+  deleteCategory,
+  habits,
+  homeCache,
+  homeReady,
+  markHomeReady
+} = useData();
+
+
+
+const initial: Block[] =
+  openDay?.id &&
+  homeCache !== null &&
+  homeCache.dayId === openDay.id
+    ? homeCache.blocks
+    : [];
+
+
+    const shouldUnlock = (
+  !openDay ||
+  openDay.day_phase !== "locked" ||
+  !homeReady ||
+  !homeCache
+);
+
+    const { blocks, dayReady, saveTimeBlock, getCurrentBlockIndex } =
+  useTimeBlocks(openDay, initial, () => {
+    markHomeReady();
+  });
+
   const [activeBlockIndex, setActiveBlockIndex] = useState<number | null>(null);
   const [isTimeBlockModalOpen, setIsTimeBlockModalOpen] = useState(false);
-  const [habits, setHabits] = useState<Habit[]>([]);
-  const insets = useSafeAreaInsets();
-  const homeReady = openDayChecked && cooldownChecked;
   const wakeTime = openDay ? new Date(openDay.start_time) : null;
   const earliestSleepTime = wakeTime ? getEarliestSleepTime(wakeTime) : null;
-  const now = new Date();
+  const [now, setNow] = useState(new Date());
   const canLogSleep = earliestSleepTime ? now >= earliestSleepTime : false;
   const remainingMs = earliestSleepTime ? Math.max(earliestSleepTime.getTime() - now.getTime(), 0) : 0;
   const heroBlock = openDay ? getCurrentBlock(blocks) : null;
   const activeBlock = activeBlockIndex !== null ? blocks[activeBlockIndex] : null;
-  const {
-  categories,
-  handleAddCategory,
-  handleDeleteCategory,
-  reloadCategories
-} = useCategories();
+
+  const { userId } = useAuth();
+
+
+
 
 
 /* ================== EFFECTS ======================== */
 
-const hasFocusedRef = useRef(false);
+   const scrollRef = useRef<ScrollView>(null);
 
-useFocusEffect(
-  useCallback(() => {
-    let cancelled = false;
+  useFocusEffect(
+    useCallback(() => {
+      // wait 1 frame so the ScrollView is mounted + measured
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({ y: 0, animated: false });
+      });
 
-    async function loadHome() {
-      if (cancelled) return;
+      // no cleanup needed
+    }, [])
+  );
 
-      await reloadOpenDay();      // source of truth
-      await reloadCategories();   // cheap
-      await reloadTimeBlocks();   // depends on openDay
-    }
 
-    loadHome();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadOpenDay, reloadCategories, reloadTimeBlocks])
+const isLogged =
+  heroBlock &&
+  (heroBlock.categoryId !== null ||
+    (heroBlock.description &&
+      heroBlock.description.trim().length > 0));
+
+
+const startedBlocks = blocks.filter(
+  b => new Date(b.startTime) <= now
 );
+
+const loggedBlocks = startedBlocks.filter(
+  b =>
+    b.categoryId !== null ||
+    (b.description && b.description.trim().length > 0)
+);
+
+const totalStarted = startedBlocks.length;
+const totalLogged = loggedBlocks.length;
+
+const loggedPercent =
+  totalStarted === 0
+    ? 0
+    : Math.round((totalLogged / totalStarted) * 100);
+
+
+
+
+
 
 
 useEffect(() => {
-  async function loadHabits() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  // Align to the next minute boundary
+  const syncToMinute = () => {
+    const msUntilNextMinute =
+      60000 - (Date.now() % 60000);
 
-    if (!user) return;
+    setTimeout(() => {
+      setNow(new Date());
 
-    const { data } = await supabase
-      .from("habits")
-      .select("id, name, color")
-      .eq("user_id", user.id);
+      const interval = setInterval(() => {
+        setNow(new Date());
+      }, 60000);
 
-    setHabits(data ?? []);
-  }
+      // cleanup interval when component unmounts
+      return () => clearInterval(interval);
+    }, msUntilNextMinute);
+  };
 
-  loadHabits();
+  syncToMinute();
 }, []);
 
 
@@ -122,36 +182,29 @@ useEffect(() => {
 }, [openDayChecked, loadCooldown]);
 
 
-async function handleConfirmSleep(sleepTime: Date) {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  if (!user) return;
+async function handleConfirmSleep(sleepTime: Date) {
+  if (!userId) return;
 
   try {
-    // 1️⃣ Close day and capture ID
-    const dayId = await closeOpenDay({
-      userId: user.id,
-      sleepTime,
-    });
+    const dayId = await closeDay({
+  dayId: openDay.id,
+  endTime: sleepTime,
+  reason: "manual",
+});
 
-    // 2️⃣ Analyze the completed day (fire-and-forget)
-    supabase.functions.invoke("analyze-day", {
-      body: { dayId },
-    });
 
     // 3️⃣ Close modal
     setIsSleepModalOpen(false);
 
-    // 4️⃣ Refresh state
+    // 4️⃣ Refresh state (day-level only)
     await reloadOpenDay();
     await loadCooldown();
-
   } catch (err) {
     console.error("Failed to log sleep", err);
   }
 }
+
 
 
 
@@ -171,35 +224,8 @@ function handleLogNow() {
 
 
 function renderContent() {
-  // 1️⃣ App still loading initial state
-  if (!openDayChecked) {
-    return <HomeSkeleton />;
-  }
-
-  // 2️⃣ Cooldown (passive gate)
-  if (cooldownEnd) {
-    return (
-      <CooldownScreen
-        unlockTime={cooldownEnd}
-        onFinished={loadCooldown}
-      />
-    );
-  }
-
-  // 3️⃣ Day Unlock Flow
-  // - If NO open day → flow will create one
-  // - If open day but not locked → flow continues
-  if (!openDay || openDay.day_phase !== "locked") {
-    return <DayUnlockFlow
-  day={openDay}
-  onDayChanged={reloadOpenDay}
-/>
-  }
-
-  // 4️⃣ Open day exists, locked, but blocks still loading
-  if (!dayReady) {
-    return <HomeSkeleton />;
-  }
+ 
+  
 
   // 5️⃣ Fully ready
   return (
@@ -253,39 +279,66 @@ function renderContent() {
             {/* HERO */}
             <View style={styles.heroCard}>
               <View style={styles.heroCardTop}>
-              <View>
-              <Text style={styles.heroTime}>
-              {heroBlock ? heroBlock.timeLabel : "No active block"}
-              </Text>
-              <Text style={styles.heroSmall}>
-              {"Tap Log Now to record this block"}
-                </Text>
-              </View>
+  <View>
+    <Text style={styles.heroTime}>
+      {heroBlock ? heroBlock.timeLabel : "No active block"}
+    </Text>
 
-              <Pressable onPress={handleLogNow} style={styles.primaryButton}>
-                <Text style={styles.primaryButtonText}>Log Now</Text>
-                <Ionicons name="arrow-forward" size={16} color={colors.textPrimary} />
-              </Pressable>
-              </View>
+    <Text style={styles.heroSmall}>
+      {heroBlock
+        ? isLogged
+          ? "This time block has been logged"
+          : "Tap Log Now to record this block"
+        : "No active block"}
+    </Text>
+  </View>
+
+  <Pressable
+    onPress={handleLogNow}
+    style={[
+      styles.primaryButton,
+      isLogged && styles.primaryButtonSecondary,
+    ]}
+  >
+    <Text style={styles.primaryButtonText}>
+      {isLogged ? "View Log" : "Log Now"}
+    </Text>
+
+    <Ionicons
+      name={isLogged ? "eye-outline" : "arrow-forward"}
+      size={16}
+      color={colors.textPrimary}
+    />
+  </Pressable>
+</View>
             
 
 {/* PRODUCTIVITY BAR */}
         <View style={styles.prodWrap}>
-                      <View style={styles.prodRow}>
-                        <Text style={styles.prodLabel}>Productivity today</Text>
-                        <Text style={styles.prodValue}>
-                          {"50% (15/30)"}
-                        </Text>
-                      </View>
-        
-                      <View style={styles.barOuter}>
-                        <View style={[styles.barInner, { width: `50%` }]} />
-                      </View>
-        
-                      <Text style={styles.prodHint}>
-                        Scored on blocks that have started (universal 15-min intervals).
-                      </Text>
-                    </View>
+  <View style={styles.prodRow}>
+    <Text style={styles.prodLabel}>
+      Logged so far
+    </Text>
+
+    <Text style={styles.prodValue}>
+      {`${loggedPercent}% (${totalLogged}/${totalStarted})`}
+    </Text>
+  </View>
+
+  <View style={styles.barOuter}>
+    <View
+      style={[
+        styles.barInner,
+        { width: `${loggedPercent}%` },
+      ]}
+    />
+  </View>
+
+  <Text style={styles.prodHint}>
+    Only time that has already started is counted.
+  </Text>
+</View>
+
 
         {/* LOG SLEEP */}
 
@@ -357,17 +410,33 @@ function renderContent() {
   );
 }
 
-  return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.bg}>
-     
-           <ScrollView
-             contentContainerStyle={styles.container}
-             showsVerticalScrollIndicator={false}
-           >
-    {renderContent()}
-    </ScrollView>
-    </View>
+
+      return (
+  <SafeAreaView style={styles.safe}>
+    {cooldownEnd ? (
+      <View style={{ flex: 1 }}>
+        <CooldownScreen
+          unlockTime={cooldownEnd}
+          onFinished={loadCooldown}
+        />
+      </View>
+    ) : (shouldUnlock) ? (
+      <View style={{ flex: 1 }}>
+        <DayUnlockFlow
+          day={openDay}
+          onDayChanged={reloadOpenDay}
+        />
+      </View>
+    ):(
+      // ACTIVE DAY = SCROLL + HOME UI
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
+        {renderContent()}
+      </ScrollView>
+    )}
      {/* MODAL */}
       {activeBlock && openDay && (
         
@@ -394,9 +463,9 @@ function renderContent() {
     dateLabel={new Date().toDateString()}
     initialCategoryId={activeBlock.categoryId}
     initialDescription={activeBlock.description}
-    categories={categories}
-    onAddCategory={handleAddCategory}
-    onDeleteCategory={handleDeleteCategory}
+    editCount={activeBlock.edit_count ?? 0}
+    onAddCategory={addCategory}
+    onDeleteCategory={deleteCategory}
     onSave={saveTimeBlock}
     onClose={() => {
       setIsTimeBlockModalOpen(false);
@@ -442,10 +511,9 @@ function renderContent() {
 
 const styles = StyleSheet.create({
    container: {
-      paddingHorizontal: 16,
-      paddingTop: Platform.OS === "android" ? 10 : 6,
-      paddingBottom: 28,
-    },
+  paddingHorizontal: 16,
+  paddingBottom: 28,
+},
 
   scroll: { padding: 20, paddingBottom: 40 },
 
@@ -681,10 +749,6 @@ press: {
       backgroundColor: colors.background,
     },
 
-    bg: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: colors.background,
-    },
     hero: {
     marginBottom: 14,
   },
@@ -772,5 +836,10 @@ press: {
     color: colors.textSecondary,
     fontSize: 12,
     fontWeight: "600",
-  }
+  },
+  primaryButtonSecondary: {
+  backgroundColor: colors.cardStrong,
+  borderWidth: 1,
+  borderColor: colors.border,
+},
 });

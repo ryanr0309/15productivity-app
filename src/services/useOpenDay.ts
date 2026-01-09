@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "../lib/supabase";
+import { useAuth } from "../hooks/useAuth";
+import { closeDay } from "../utils/dayLifecycle";
 
-async function maybeAutoEndDay(day: any) {
-  if (!day?.start_time || day.status !== "open") return;
+async function maybeAutoEndDay(day: any): Promise<boolean> {
+  if (!day?.start_time || day.status !== "open") return false;
 
   const start = new Date(day.start_time);
   const now = new Date();
@@ -10,11 +12,10 @@ async function maybeAutoEndDay(day: any) {
   const hoursElapsed =
     (now.getTime() - start.getTime()) / (1000 * 60 * 60);
 
-
   // ⛔ Not time yet
-  if (hoursElapsed < 36) return;
+  if (hoursElapsed < 36) return false;
 
-  // 1️⃣ Get last logged block
+  // 1️⃣ Find last logged block
   const { data: lastBlock } = await supabase
     .from("time_blocks")
     .select("end_time")
@@ -24,7 +25,6 @@ async function maybeAutoEndDay(day: any) {
     .limit(1)
     .maybeSingle();
 
-
   const estimatedSleep = day.estimated_sleep_time
     ? new Date(day.estimated_sleep_time)
     : null;
@@ -33,8 +33,8 @@ async function maybeAutoEndDay(day: any) {
     ? new Date(lastBlock.end_time)
     : null;
 
-  // 2️⃣ Decide actual end time
-  let actualEnd: Date | null = estimatedSleep;
+  // 2️⃣ actualEnd = max(lastLoggedEnd, estimatedSleep, fallback=start)
+  let actualEnd = estimatedSleep ?? null;
 
   if (
     lastLoggedEnd &&
@@ -43,61 +43,66 @@ async function maybeAutoEndDay(day: any) {
     actualEnd = lastLoggedEnd;
   }
 
-  // Fallback safety
   if (!actualEnd) {
     actualEnd = start;
   }
 
-  // 3️⃣ End the day
-  await supabase
-    .from("days")
-    .update({
-      status: "closed",
-      end_time: actualEnd.toISOString(),
-      day_phase: "locked",
-    })
-    .eq("id", day.id);
+  // 3️⃣ Close via unified lifecycle
+  await closeDay({
+    dayId: day.id,
+    endTime: actualEnd,
+    reason: "auto",
+  });
+
+  return true;
 }
 
 
+
 export function useOpenDay() {
+  const { userId, authReady: authLoading } = useAuth();
+
   const [openDay, setOpenDay] = useState<any | null>(null);
   const [openDayChecked, setOpenDayChecked] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  async function loadOpenDay() {
+  const inFlightRef = useRef(false);
+  
+
+  const loadOpenDay = useCallback(async () => {
+    if (!userId) {
+      setOpenDay(null);
+      setOpenDayChecked(true);
+      return;
+    }
+
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+
     setLoading(true);
-
     try {
-      const { data: auth } = await supabase.auth.getUser();
-
-      if (!auth?.user) {
-        setOpenDay(null);
-        return;
-      }
-
       const { data } = await supabase
-  .from("days")
-  .select("*")
-  .eq("user_id", auth.user.id)
-  .eq("status", "open")
-  .maybeSingle();
+        .from("days")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("status", "open")
+        .maybeSingle();
 
-if (data) {
-  await maybeAutoEndDay(data);
-
-  // Re-fetch in case it was just ended
-  const { data: refreshed } = await supabase
-    .from("days")
-    .select("*")
-    .eq("user_id", auth.user.id)
-    .eq("status", "open")
-    .maybeSingle();
-
-  setOpenDay(refreshed ?? null);
-} else {
+      if (!data) {
   setOpenDay(null);
+  return;
 }
+
+// 🔒 AUTO-CLOSE CHECK (36h rule)
+const didAutoEnd = await maybeAutoEndDay(data);
+
+if (didAutoEnd) {
+  // Day was closed — reload to get the new state
+  setOpenDay(null);
+  return;
+}
+
+setOpenDay(data);
 
     } catch (err) {
       console.error("Failed to load open day", err);
@@ -105,17 +110,24 @@ if (data) {
     } finally {
       setOpenDayChecked(true);
       setLoading(false);
+      inFlightRef.current = false;
     }
-  }
+  }, [userId]);
 
   useEffect(() => {
+    if (authLoading) return;
     loadOpenDay();
-  }, []);
+  }, [authLoading, loadOpenDay]);
+
+
+
+  
 
   return {
     openDay,
     openDayChecked,
     loading,
-    reloadOpenDay: loadOpenDay,
+    reloadOpenDay: loadOpenDay, // ✅ works now
   };
 }
+

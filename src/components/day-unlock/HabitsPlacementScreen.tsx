@@ -10,6 +10,7 @@ import {
 import * as Haptics from "expo-haptics";
 import { supabase } from "../../lib/supabase";
 import { LinearGradient } from "expo-linear-gradient";
+import { colors } from "../../constants/colors";
 
 /* ---------------- CONSTANTS ---------------- */
 
@@ -160,8 +161,7 @@ export default function HabitPlacementScreen({
 
   return (
     
-    <LinearGradient
-      colors={["#0B132B", "#1C2541"]}
+    <View
       style={styles.container}
     >
       {/* HEADER */}
@@ -268,7 +268,7 @@ export default function HabitPlacementScreen({
           Continue
         </Text>
       </Pressable>
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -277,7 +277,7 @@ export default function HabitPlacementScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#171619",
+    backgroundColor: colors.background,
     padding: CONTAINER_PADDING,
   },
 

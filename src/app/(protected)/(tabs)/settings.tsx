@@ -1,9 +1,14 @@
-import { View, Text, ScrollView, StyleSheet } from "react-native";
-import { colors } from "../../constants/colors";
-import SettingsRow from "../../components/settings/SettingsRow";
+import { View, Text, ScrollView, StyleSheet, Pressable } from "react-native";
+import { colors } from "../../../constants/colors";
+import SettingsRow from "../../../components/settings/SettingsRow";
 import React from "react";
+import { AuthProvider } from "../../../providers/AuthProvider";
+import { useAuth } from "../../../hooks/useAuth";
+import LogoutButton from "../../../components/auth/LogoutButton";
 
 export default function Settings() {
+
+  const {logout} = useAuth()
   return (
     <ScrollView
       style={styles.container}
@@ -41,10 +46,7 @@ export default function Settings() {
         value="Manage"
         showChevron
       />
-      <SettingsRow
-        label="Log Out"
-        danger
-      />
+      <LogoutButton/>
     </ScrollView>
   );
 }

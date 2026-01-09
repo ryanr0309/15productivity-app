@@ -60,7 +60,7 @@ export default function TimeBlockCard({
         /* BACKGROUND */
         {
           backgroundColor: isCompleted
-            ? loggedCategory?.color ?? colors.background
+            ? block.categoryColor ?? colors.background
             : hasPlannedHabit
             ? `${plannedHabit!.color}22`
             : colors.background,
@@ -101,7 +101,7 @@ export default function TimeBlockCard({
             numberOfLines={1}
             ellipsizeMode="tail"
           >
-            {loggedCategory?.label ?? "Completed"}
+            {block.categoryLabel ?? "Completed"}
           </Text>
 
           <Text style={styles.secondaryText}>

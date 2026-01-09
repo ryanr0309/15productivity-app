@@ -1,21 +1,32 @@
-import { ClassifiedBlock } from "./productivity";
 import { Block } from "../utils/timeBlocks";
+import { ClassifiedBlock } from "./productivity";
 
-export function breakdownByCategory(
-  blocks: Block[]
-) {
-  const totals: Record<string, number> = {};
+type CategoryBreakdownItem = {
+  label: string;
+  color: string;
+  minutes: number;
+};
 
-  for (const b of blocks) {
-    const key = b.categoryId ?? "Uncategorized";
+export function breakdownByCategory(blocks: Block[]): CategoryBreakdownItem[] {
+  const map = new Map<string, CategoryBreakdownItem>();
 
-    const durationMinutes =
-      (b.endTime.getTime() - b.startTime.getTime()) / 60000;
+  for (const block of blocks) {
+    if (!block.categoryLabel || !block.categoryColor) continue;
 
-    totals[key] = (totals[key] || 0) + durationMinutes;
+    const key = block.categoryLabel; // label is the stable identity
+
+    if (!map.has(key)) {
+      map.set(key, {
+        label: block.categoryLabel,
+        color: block.categoryColor,
+        minutes: 0,
+      });
+    }
+
+    map.get(key)!.minutes += 15;
   }
 
-  return totals;
+  return Array.from(map.values());
 }
 
 

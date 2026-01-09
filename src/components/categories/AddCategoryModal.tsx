@@ -17,20 +17,26 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   categories: Category[];
+  habits: { color: string }[];
   onCreate: (category: Category) => void;
 };
+
 
 
 export default function AddCategoryModal({
   visible,
   onClose,
   categories,
+  habits,
   onCreate,
 }: Props) {
   const [label, setLabel] = useState("");
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const usedColors = [
+  ...categories.map(c => c.color),
+  ...habits.map(h => h.color),
+];
 
-  const usedColors = categories.map((c) => c.color);
 
   // Reset state when modal closes
   useEffect(() => {

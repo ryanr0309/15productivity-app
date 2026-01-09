@@ -1,106 +1,117 @@
 import React from "react";
 import BeginDayScreen from "./BeginDayScreen";
-import DayShapeScreen from "./DayShapeScreen";
 import HabitsPlacementScreen from "./HabitsPlacementScreen";
-import DayLockedScreen from "./DayLockedScreen";
 import { supabase } from "../../lib/supabase";
 import { ensureTimeBlocksExist } from "../../utils/blocks";
-
-
+import { useData } from "../../providers/DataProvider";
+import { Text, View } from "react-native";
+import { HomeLoadingScreen } from "./Preparing";
 
 type Props = {
   day: any | null;
   onDayChanged: () => Promise<void>;
 };
 
-
 export default function DayUnlockFlow({ day, onDayChanged }: Props) {
+  const { preloadHome, homeReady, reloadOpenDay, markHomeReady } = useData();
+
+  /* ──────────────────────────────────────────────
+   * 1️⃣ No day → Begin flow
+   * ────────────────────────────────────────────── */
   if (!day) {
     return (
       <BeginDayScreen
-        onBeginDay={async () => {
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
-
+        onBeginDay={async (estimatedSleep) => {
+          const { data: { user } } = await supabase.auth.getUser();
           if (!user) return;
 
-          const { error } = await supabase.from("days").insert({
-            user_id: user.id,
-            start_time: new Date().toISOString(),
-            day_phase: "rhythm",
-            status: "open",
-            interval_minutes: 15,
-          });
+          const now = new Date();
+
+          const { data: newDay, error } = await supabase
+            .from("days")
+            .insert({
+              user_id: user.id,
+              start_time: now.toISOString(),
+              estimated_sleep_time: estimatedSleep.toISOString(),
+              status: "open",
+              day_phase: "habits", // 🔥 jump straight to habits
+              interval_minutes: 15,
+            })
+            .select()
+            .single();
 
           if (error) {
-            console.error(error);
+            console.error("BeginDay failed:", error);
             return;
           }
 
-          await onDayChanged(); // 🔑 THIS updates the real openDay
+          // generate blocks before habits screen
+          await ensureTimeBlocksExist(newDay);
+
+          await onDayChanged();
         }}
       />
     );
   }
 
-if (day.day_phase === "rhythm") {
-  return (
-    <DayShapeScreen
-      day={day}
-      onContinue={async sleepISO => {
-        await supabase
-          .from("days")
-          .update({
-            estimated_sleep_time: sleepISO,
-            day_phase: "habits",
-          })
-          .eq("id", day.id);
-
-        await ensureTimeBlocksExist({
-          ...day,
-          estimated_sleep_time: sleepISO,
-        });
-
-        await onDayChanged();
-      }}
-    />
-  );
-}
-
-
+  /* ──────────────────────────────────────────────
+   * 2️⃣ Habits placement
+   * ────────────────────────────────────────────── */
   if (day.day_phase === "habits") {
     return (
-       <HabitsPlacementScreen
-      dayId={day.id} // 🔑 THIS WAS MISSING
-      onContinue={async blocks => {
-  const updates = blocks.map(b =>
-    supabase
-      .from("time_blocks")
+      <HabitsPlacementScreen
+        dayId={day.id}
+        onContinue={async (blocks) => {
+  console.log("⚙️ HABITS ONCONTINUE START");
+
+  // 1. Save habit mappings
+  await Promise.all(blocks.map(b =>
+    supabase.from("time_blocks")
       .update({ habit_id: b.habit_id })
       .eq("id", b.id)
-  );
+  ));
 
-  const results = await Promise.all(updates);
+  console.log("✔️ Habit mappings saved");
 
-  const error = results.find(r => r.error)?.error;
-  if (error) {
-    console.error("Failed to save habit placements", error);
-    return;
-  }
+  // 2. Ensure blocks
+  await ensureTimeBlocksExist(day);
+  console.log("✔️ ensureTimeBlocksExist finished");
 
+  // 3. Lock day
   await supabase
     .from("days")
     .update({ day_phase: "locked" })
     .eq("id", day.id);
 
-  await onDayChanged();
+  console.log("✔️ day locked");
+
+  // 4. Reload openDay (critical)
+  await reloadOpenDay();
+  console.log("✔️ openDay reloaded");
+
+  // 5. Preload blocks for Home
+  await preloadHome();
+  console.log("✔️ preloadHome finished");
+
+  // 6. Mark ready for Home
+  markHomeReady();
+  console.log("🚀 markHomeReady()");
 }}
 
-
-    />
+      />
     );
   }
 
-  return <DayLockedScreen onEnterToday={() => {}} />;
+  /* ──────────────────────────────────────────────
+   * 3️⃣ Locked BUT still loading home data
+   * ────────────────────────────────────────────── *
+
+  /* ──────────────────────────────────────────────
+   * 4️⃣ Locked + homeReady → exit unlock flow
+   * parent will render Home
+   * ────────────────────────────────────────────── */
+  return (
+    <HomeLoadingScreen/>
+  )
 }
+

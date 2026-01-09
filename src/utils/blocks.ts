@@ -51,41 +51,48 @@ export function normalizeBlocks(rows: any[]): Block[] {
       description: row.description ?? "",
       classification: row.classification ?? "neutral",
       goalAlignment: row.goal_alignment ?? "none",
+      edit_count: row.edit_count ?? 0,
+      categoryColor: row.category_color ?? null,
+      categoryLabel: row.category_label ?? null
     };
   });
 }
 
+function getGenerationEnd(day: any, resolvedSleep: Date) {
+  // If the day is already closed, respect it
+  if (day.end_time) {
+    return new Date(day.end_time);
+  }
+
+  const BUFFER_MINUTES = 90;
+  const bufferedNow = new Date(
+    Date.now() + BUFFER_MINUTES * 60_000
+  );
+
+  // Generate at least until the later of:
+  // - estimated sleep
+  // - now + buffer
+  return bufferedNow > resolvedSleep
+    ? bufferedNow
+    : resolvedSleep;
+}
+
+
 export async function ensureTimeBlocksExist(day: any) {
-
-
   if (!day.start_time || !day.estimated_sleep_time) return;
 
   const intervalMs = 15 * 60 * 1000;
 
-  // ─────────────────────────────────────────────
-  // 1️⃣ Resolve day start
-  // ─────────────────────────────────────────────
   const dayStart = normalizeToInterval(
     new Date(day.start_time),
     15
   );
 
-  if (isNaN(dayStart.getTime())) {
-    console.warn("Invalid day.start_time", day.start_time);
-    return;
-  }
+  if (isNaN(dayStart.getTime())) return;
 
-  // ─────────────────────────────────────────────
-  // 2️⃣ Resolve sleep as NEAREST occurrence
-  // ─────────────────────────────────────────────
   const sleepInput = new Date(day.estimated_sleep_time);
+  if (isNaN(sleepInput.getTime())) return;
 
-  if (isNaN(sleepInput.getTime())) {
-    console.warn("Invalid estimated_sleep_time", day.estimated_sleep_time);
-    return;
-  }
-
-  // Anchor sleep to SAME day as start_time
   const resolvedSleep = new Date(dayStart);
   resolvedSleep.setHours(
     sleepInput.getHours(),
@@ -94,14 +101,10 @@ export async function ensureTimeBlocksExist(day: any) {
     0
   );
 
-  // Roll forward ONLY if sleep is before or equal to wake
   if (resolvedSleep <= dayStart) {
     resolvedSleep.setDate(resolvedSleep.getDate() + 1);
   }
 
-  // ─────────────────────────────────────────────
-  // 3️⃣ Fetch existing blocks
-  // ─────────────────────────────────────────────
   const { data: existingBlocksRaw } = await supabase
     .from("time_blocks")
     .select("start_time, end_time")
@@ -110,29 +113,19 @@ export async function ensureTimeBlocksExist(day: any) {
 
   const existingBlocks = existingBlocksRaw ?? [];
 
-  let nextStart: Date;
+  let nextStart =
+    existingBlocks.length > 0
+      ? new Date(existingBlocks[existingBlocks.length - 1].end_time)
+      : dayStart;
 
-  if (existingBlocks.length > 0) {
-    nextStart = new Date(
-      existingBlocks[existingBlocks.length - 1].end_time
-    );
-  } else {
-    nextStart = dayStart;
-  }
+  // 🔑 NEW: dynamic generation horizon
+  const generationEnd = getGenerationEnd(day, resolvedSleep);
 
-  // ─────────────────────────────────────────────
-  // 4️⃣ Safety: nothing to generate
-  // ─────────────────────────────────────────────
-  if (nextStart >= resolvedSleep) {
-    return;
-  }
+  if (nextStart >= generationEnd) return;
 
-  // ─────────────────────────────────────────────
-  // 5️⃣ Generate blocks (wake → sleep)
-  // ─────────────────────────────────────────────
   const blocksToInsert: any[] = [];
 
-  while (nextStart < resolvedSleep) {
+  while (nextStart < generationEnd) {
     const start = new Date(nextStart);
     const end = new Date(start.getTime() + intervalMs);
 
@@ -150,4 +143,3 @@ export async function ensureTimeBlocksExist(day: any) {
     await supabase.from("time_blocks").insert(blocksToInsert);
   }
 }
-

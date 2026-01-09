@@ -1,7 +1,12 @@
 export const colors = {
-  background: "#1B3061",
-  card: "rgba(0,0,0,0.5)",
+  background: "#0B1224",
+  card: "rgba(255,255,255,0.06)",
+  cardStrong: "rgba(255,255,255,0.09)",
   textPrimary: "#FFFFFF",
-  textSecondary: "#B0B8D4",
-  accent: "#4DA3FF", // later
+  textSecondary: "rgba(255,255,255,0.7)",
+  border: "rgba(255,255,255,0.10)",
+  accent: "#4DA3FF",
+  good: "#22C55E",
+  warn: "#F59E0B",
+  danger: "#EF4444",
 };

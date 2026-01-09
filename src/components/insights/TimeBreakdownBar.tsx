@@ -1,15 +1,27 @@
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import React from "react";
-import { colors } from "../../constants/colors";
+
+const colors = {
+  background: "#0B1224",
+  card: "rgba(255,255,255,0.06)",
+  cardStrong: "rgba(255,255,255,0.09)",
+  textPrimary: "#FFFFFF",
+  textSecondary: "rgba(255,255,255,0.7)",
+  border: "rgba(255,255,255,0.10)",
+  accent: "#4DA3FF",
+  good: "#22C55E",
+  warn: "#F59E0B",
+  danger: "#EF4444",
+};
 
 type BreakdownMode = "outcome" | "category";
 
 type TimeDistributionItem = {
-  id: string;
   label: string;
   minutes: number;
   color: string;
 };
+
 
 type Props = {
   mode: BreakdownMode;
@@ -25,21 +37,21 @@ export default function TimeBreakdownBar({
   const maxMinutes = Math.max(...data.map(item => item.minutes), 1);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.cardBase, styles.container]}>
       {/* HEADER */}
       <View style={styles.header}>
         <Text style={styles.title}>Where Your Time Went</Text>
 
         <View style={styles.toggle}>
+           <ToggleButton
+            label="Categories"
+            active={mode === "category"}
+            onPress={() => onChangeMode("category")}
+          />
           <ToggleButton
             label="Outcome"
             active={mode === "outcome"}
             onPress={() => onChangeMode("outcome")}
-          />
-          <ToggleButton
-            label="Categories"
-            active={mode === "category"}
-            onPress={() => onChangeMode("category")}
           />
         </View>
       </View>
@@ -49,7 +61,7 @@ export default function TimeBreakdownBar({
         const widthPercent = (item.minutes / maxMinutes) * 100;
 
         return (
-          <View key={item.id} style={styles.row}>
+          <View key={`${item.label}-${item.color}`} style={styles.row}>
             <Text style={styles.label}>{item.label}</Text>
 
             <View style={styles.barWrapper}>
@@ -120,32 +132,42 @@ function formatMinutes(minutes: number) {
 /* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
+  /* ---------- CARD ---------- */
   container: {
-    backgroundColor: "rgba(0,0,0,0.5)",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 10,
-  },
+  backgroundColor: colors.card,
+  borderRadius: 16,
+  padding: 16,
+  borderWidth: 1,
+  borderColor: colors.border,
+  overflow: "hidden", // ✅ popup-safe
+},
 
+
+  /* ---------- HEADER ---------- */
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
+ 
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 14,
   },
 
-  title: {
-    color: colors.textPrimary,
-    fontSize: 14,
-    fontWeight: "600",
-  },
+title: {
+  color: colors.textPrimary,
+  fontSize: 14,
+  fontWeight: "700",
+  flexShrink: 1, // ✅ prevents pushing toggle out
+},
 
-  toggle: {
-    flexDirection: "row",
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderRadius: 8,
-    padding: 2,
-  },
+  /* ---------- TOGGLE ---------- */
+toggle: {
+  flexDirection: "row",
+  backgroundColor: colors.cardStrong,
+  borderRadius: 8,
+  padding: 2,
+  borderWidth: 1,
+  borderColor: colors.border,
+  marginLeft: "auto", // ✅ KEY LINE
+},
 
   toggleButton: {
     paddingVertical: 4,
@@ -154,19 +176,21 @@ const styles = StyleSheet.create({
   },
 
   toggleButtonActive: {
-    backgroundColor: "rgba(255,255,255,0.2)",
+    backgroundColor: colors.background,
   },
 
   toggleText: {
     fontSize: 12,
     color: colors.textSecondary,
+    fontWeight: "600",
   },
 
   toggleTextActive: {
     color: colors.textPrimary,
-    fontWeight: "600",
+    fontWeight: "700",
   },
 
+  /* ---------- ROW ---------- */
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -177,12 +201,14 @@ const styles = StyleSheet.create({
     width: 90,
     color: colors.textPrimary,
     fontSize: 13,
+    fontWeight: "600",
   },
 
+  /* ---------- BAR ---------- */
   barWrapper: {
     flex: 1,
     height: 8,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: colors.cardStrong,
     borderRadius: 4,
     marginHorizontal: 8,
     overflow: "hidden",
@@ -198,5 +224,15 @@ const styles = StyleSheet.create({
     textAlign: "right",
     color: colors.textSecondary,
     fontSize: 12,
+    fontWeight: "600",
+  },
+
+   cardBase: {
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
 });
+
