@@ -32,36 +32,33 @@ export default function SignupAuthScreen() {
     webClientId: extra?.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
   });
 
-  async function attachOnboarding(userId: string) {
+async function attachOnboarding(userId: string) {
   try {
-    // 1) Persist Goals → user_settings
-    await supabase.from("user_settings").upsert({
-      user_id: userId,
-      goals: goals ?? [],
-      updated_at: new Date().toISOString(),
-    });
+    // 1) goals → user_settings
+    const { data, error } = await supabase
+  .from("user_settings")
+  .upsert({
+    user_id: userId,
+    goals: goals ?? [],
+    updated_at: new Date().toISOString(),
+  })
+  .select("*");
 
-    // 2) Normalize helper
+console.log("UPSET_GOALS:", { data, error });
+    // 2) normalize helper
     const normalize = (s: string) =>
       s.toLowerCase().trim();
 
-    const normalizedCategories = (categories ?? []).map(normalize);
-    const normalizedHabits = (habits ?? []).map(normalize);
-
-    // 3) Fetch existing categories for user (in case re-attach or edits)
+    // 3) fetch existing categories
     const { data: existingCategories } = await supabase
       .from("categories")
       .select("*")
       .eq("user_id", userId);
 
-    const existingLabels = (existingCategories ?? []).map(c =>
-      normalize(c.label)
-    );
+    const final = existingCategories ?? [];
 
-    // 4) Assign colors (unique)
-    const usedColors = new Set(
-      (existingCategories ?? []).map(c => c.color)
-    );
+    // 4) color allocator
+    const usedColors = new Set(final.map(c => c.color));
 
     function nextColor() {
       for (const c of CATEGORY_COLORS) {
@@ -70,68 +67,68 @@ export default function SignupAuthScreen() {
           return c;
         }
       }
-      // If exhausted — wrap or random (here wrap)
+      // fallback wrap
       const c = CATEGORY_COLORS[0];
       usedColors.add(c);
       return c;
     }
 
-    // 5) Insert categories
-    const categoriesToInsert: { user_id: string; label: string; color: string }[] = [];
+    // 5) insert primary categories
+    const normalizedExisting = new Set(final.map(c => normalize(c.label)));
 
-    for (const cat of categories ?? []) {
+    const categoriesToInsert = [];
+
+    for (const cat of categories) {
       const norm = normalize(cat);
-      if (!existingLabels.includes(norm)) {
-        categoriesToInsert.push({
-          user_id: userId,
-          label: cat, // clean form already
-          color: nextColor(),
-        });
-        existingLabels.push(norm);
+      if (!normalizedExisting.has(norm)) {
+        const color = nextColor();
+        categoriesToInsert.push({ user_id: userId, label: cat, color });
+        normalizedExisting.add(norm);
+        final.push({ label: cat, color });
       }
     }
 
     let insertedCategories = [];
     if (categoriesToInsert.length > 0) {
-      const { data: inserted } = await supabase
+      const { data } = await supabase
         .from("categories")
         .insert(categoriesToInsert)
         .select("*");
-      insertedCategories = inserted ?? [];
+      insertedCategories = data ?? [];
+      final.push(...insertedCategories);
     }
 
-    // Refresh category list for matching
-    const finalCategories = [...(existingCategories ?? []), ...insertedCategories];
+    // 6) insert habits w/ pairing
+    const habitsToInsert = [];
 
-    // 6) Insert habits w/ matching logic
-    const habitsToInsert: { user_id: string; name: string; color: string }[] = [];
-
-    for (const h of habits ?? []) {
+    for (const h of habits) {
       const normH = normalize(h);
-      const match = finalCategories.find(c => normalize(c.label) === normH);
+      const match = final.find(c => normalize(c.label) === normH);
 
       if (match) {
-        // adopts existing category color
+        // matched category → adopt color
         habitsToInsert.push({
           user_id: userId,
           name: h,
           color: match.color,
         });
       } else {
-        // create category + habit pair
+        // no match → create both
         const color = nextColor();
         const newCat = {
           user_id: userId,
           label: h,
           color,
         };
-        finalCategories.push(newCat);
 
+        final.push(newCat);
         habitsToInsert.push({
           user_id: userId,
           name: h,
           color,
         });
+
+        await supabase.from("categories").insert(newCat);
       }
     }
 
@@ -139,17 +136,18 @@ export default function SignupAuthScreen() {
       await supabase.from("habits").insert(habitsToInsert);
     }
 
-    // 7) Flag onboarding completed at Auth-level for logic gate
+    // 7) onboarding flag
     await supabase.auth.updateUser({
       data: { onboarding_completed: true },
     });
 
-    // 8) Route to Paywall
+    // 8) redirect
     router.replace("/paywall");
   } catch (err) {
     console.log("ATTACH ERROR:", err);
   }
 }
+
 
 
   // 🍏 APPLE SIGN-IN
