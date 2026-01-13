@@ -8,7 +8,6 @@ import LogoutButton from "../../../components/auth/LogoutButton";
 
 export default function Settings() {
 
-  const {logout} = useAuth()
   return (
     <ScrollView
       style={styles.container}

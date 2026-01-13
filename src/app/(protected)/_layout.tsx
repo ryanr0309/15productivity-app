@@ -14,6 +14,7 @@ export default function ProtectedLayout() {
     homeReady,
   } = useData();
 
+  console.log("HITTING PROTECTED LAYOUT")
   // 🔒 ensure bootstrap runs ONCE
   const bootstrappedRef = useRef(false);
 

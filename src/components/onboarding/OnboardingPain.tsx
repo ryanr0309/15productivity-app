@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors } from "../../constants/colors"; // adjust path if needed
+import { useOnboarding } from "../../providers/OnboardingProvider";
 
 type Props = {
   onContinue: (choiceId: string) => void;
@@ -49,7 +50,7 @@ const OPTIONS = [
   },
 ];
 
-export default function OnboardingPainScreen({
+export default function PainScreen({
   onContinue,
   onSkip,
 }: Props) {
@@ -59,6 +60,10 @@ export default function OnboardingPainScreen({
     if (!selectedId) return;
     onContinue(selectedId);
   };
+
+  const { goals, habits, categories } = useOnboarding();
+  console.log("ONBOARDING STATE:", { goals, habits, categories });
+
 
   return (
     <LinearGradient
