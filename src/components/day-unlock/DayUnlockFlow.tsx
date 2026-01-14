@@ -62,7 +62,7 @@ export default function DayUnlockFlow({ day, onDayChanged }: Props) {
       <HabitsPlacementScreen
         dayId={day.id}
         onContinue={async (blocks) => {
-  console.log("⚙️ HABITS ONCONTINUE START");
+  
 
   // 1. Save habit mappings
   await Promise.all(blocks.map(b =>
@@ -71,11 +71,11 @@ export default function DayUnlockFlow({ day, onDayChanged }: Props) {
       .eq("id", b.id)
   ));
 
-  console.log("✔️ Habit mappings saved");
+
 
   // 2. Ensure blocks
   await ensureTimeBlocksExist(day);
-  console.log("✔️ ensureTimeBlocksExist finished");
+
 
   // 3. Lock day
   await supabase
@@ -83,19 +83,19 @@ export default function DayUnlockFlow({ day, onDayChanged }: Props) {
     .update({ day_phase: "locked" })
     .eq("id", day.id);
 
-  console.log("✔️ day locked");
+ 
 
   // 4. Reload openDay (critical)
   await reloadOpenDay();
-  console.log("✔️ openDay reloaded");
+ 
 
   // 5. Preload blocks for Home
   await preloadHome();
-  console.log("✔️ preloadHome finished");
+
 
   // 6. Mark ready for Home
   markHomeReady();
-  console.log("🚀 markHomeReady()");
+
 }}
 
       />

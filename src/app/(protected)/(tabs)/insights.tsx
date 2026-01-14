@@ -295,9 +295,7 @@ const worstWindow =
   findMostUnproductiveWindow(classifiedBlocks);
 
   {useEffect(() => {
-  console.log("BREAKDOWN MODE:", breakdownMode);
-  console.log("RAW CATEGORY BAR DATA:", categoryBarData);
-  console.log("DATA PASSED TO BAR:", data);
+
 }, [breakdownMode, categoryBarData, data])}
 
   /** ---------------- GUARDS ---------------- */

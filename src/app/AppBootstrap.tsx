@@ -25,7 +25,7 @@ export default function AppBootstrap({ children }: { children: React.ReactNode }
     bootstrap();
   }, [authLoading, userId]);
 
-  console.log("CHECK THIS" , bootstrapped, userId, homeReady)
+ 
 
   if (!bootstrapped || (userId && !homeReady)) {
     

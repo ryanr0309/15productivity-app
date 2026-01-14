@@ -3,8 +3,7 @@ import React from "react";
 import { StyleSheet, Text, View, ActivityIndicator } from "react-native";
 
 export function AppSplash() {
-  console.log("APPSPLASH");
-  return (
+    return (
     <View style={styles.container}>
       <Text style={styles.logo}>15</Text>
       <ActivityIndicator />

@@ -37,7 +37,7 @@ type Props = {
 
 export default function OnboardingHabitScreen({ onContinue, onSkip }: Props) {
   const { goals, categories, setHabits } = useOnboarding();
-  console.log(goals, categories)
+
   
 
   const MAX = 5;

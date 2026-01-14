@@ -5,11 +5,8 @@ import { router } from "expo-router";
 
 export default function LogoutButton() {
   async function handleLogout() {
-    const { error } = await supabase.auth.signOut();
-
-
-   
-    router.replace("/(auth)/login");
+    await supabase.auth.signOut();
+    router.replace("/"); // let index guard route from here
   }
 
   return (

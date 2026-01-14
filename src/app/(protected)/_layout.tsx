@@ -1,66 +1,41 @@
 // app/(protected)/_layout.tsx
 import { Slot, Redirect } from "expo-router";
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import { AppSplash } from "../../components/home/AppSplash";
 import { useAuth } from "../../hooks/useAuth";
+import { useBilling } from "../../providers/BillingProvider";
 import { useData } from "../../providers/DataProvider";
 
 export default function ProtectedLayout() {
-  const { userId, authReady, onboardingCompleted } = useAuth();
-  const {
-    preloadHome,
-    preloadInsights,
-    preloadLab,
-    homeReady,
-  } = useData();
+  const { userId, authReady } = useAuth();
+  const { loading: billingLoading, isActive } = useBilling();
+  const { homeReady } = useData();
 
-  console.log("HITTING PROTECTED LAYOUT")
-  // 🔒 ensure bootstrap runs ONCE
-  const bootstrappedRef = useRef(false);
-
-  useEffect(() => {
-    if (!authReady) return;
-    if (!userId) return;
-    if (bootstrappedRef.current) return;
-
-    bootstrappedRef.current = true;
-
-    // 🔥 THIS IS YOUR OLD APPBOOTSTRAP
-    Promise.all([
-      preloadHome(),      // blocks + open day
-      preloadInsights(),  // insights cache
-      preloadLab(),       // lab cache
-    ]);
-  }, [
-    authReady,
-    userId,
-    preloadHome,
-    preloadInsights,
-    preloadLab,
-  ]);
-
-  /* ================= ROUTING GATES ================= */
-
-  // 1️⃣ Auth unresolved → splash
-  if (!authReady) {
+  // 1️⃣ Wait for auth + billing to hydrate
+  if (!authReady || billingLoading) {
     return <AppSplash />;
   }
 
-  // 2️⃣ Logged out → auth flow
+  // 2️⃣ Auth required
   if (!userId) {
     return <Redirect href="/(auth)/welcome" />;
   }
 
-  // 3️⃣ Onboarding incomplete → onboarding flow
-  if (!onboardingCompleted) {
-    return <Redirect href="/(onboarding)" />;
+  // 3️⃣ ⚠️ Important: "undefined" means still resolving RC entitlements
+  if (isActive === undefined) {
+    return <AppSplash />;
   }
 
-  // 4️⃣ Home data not ready → splash (NO SKELETON FLASH)
+  // 4️⃣ User has no entitlement → paywall
+  if (!isActive) {
+    return <Redirect href="/paywall" />;
+  }
+
+  // 5️⃣ Optional data preload
   if (!homeReady) {
     return <AppSplash />;
   }
 
-  // ✅ Everything ready → render protected routes
+  // 6️⃣ Fully authorized + hydrated
   return <Slot />;
 }

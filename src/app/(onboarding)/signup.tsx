@@ -14,13 +14,15 @@ import * as WebBrowser from "expo-web-browser";
 import * as Google from "expo-auth-session/providers/google";
 import { useOnboarding } from "../../providers/OnboardingProvider";
 import { CATEGORY_COLORS } from "../../constants/categoryColors";
+import { useBilling } from "../../providers/BillingProvider";
 
 WebBrowser.maybeCompleteAuthSession();
 
 export default function SignupAuthScreen() {
   const router = useRouter();
   const { goals, categories, habits } = useOnboarding();
-  console.log(goals, categories, habits)
+  const {presentPaywall} = useBilling()
+
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -32,7 +34,8 @@ export default function SignupAuthScreen() {
     webClientId: extra?.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
   });
 
-async function attachOnboarding(userId: string) {
+async function attachOnboarding(userId: string,
+  presentPaywall: () => Promise<boolean>) {
   try {
     // 1) goals → user_settings
     const { data, error } = await supabase
@@ -44,7 +47,7 @@ async function attachOnboarding(userId: string) {
   })
   .select("*");
 
-console.log("UPSET_GOALS:", { data, error });
+
     // 2) normalize helper
     const normalize = (s: string) =>
       s.toLowerCase().trim();
@@ -142,9 +145,19 @@ console.log("UPSET_GOALS:", { data, error });
     });
 
     // 8) redirect
-    router.replace("/paywall");
+
+    const success = await presentPaywall();
+    
+
+if (success) {
+  router.replace("/(protected)");
+} else {
+  // stay on paywall retry screen
+  router.replace("/paywall"); 
+}
+
   } catch (err) {
-    console.log("ATTACH ERROR:", err);
+
   }
 }
 
@@ -173,9 +186,9 @@ console.log("UPSET_GOALS:", { data, error });
 
       if (error) throw error;
 
-      await attachOnboarding(data.user.id);
+      await attachOnboarding(data.user.id, presentPaywall);
     } catch (err: any) {
-      console.log(err);
+   
       setErrorMsg(err?.message || "Apple sign-in failed");
     } finally {
       setLoading(false);
@@ -189,7 +202,7 @@ console.log("UPSET_GOALS:", { data, error });
       setErrorMsg("");
       await promptGoogle();
     } catch (err: any) {
-      console.log(err);
+  
       setErrorMsg("Google sign-in failed");
       setLoading(false);
     }
@@ -212,7 +225,7 @@ console.log("UPSET_GOALS:", { data, error });
           return;
         }
 
-        await attachOnboarding(data.user.id);
+        await attachOnboarding(data.user.id, presentPaywall);
       }
     })();
   }, [googleResponse]);

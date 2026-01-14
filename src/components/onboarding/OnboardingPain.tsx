@@ -62,7 +62,7 @@ export default function PainScreen({
   };
 
   const { goals, habits, categories } = useOnboarding();
-  console.log("ONBOARDING STATE:", { goals, habits, categories });
+
 
 
   return (

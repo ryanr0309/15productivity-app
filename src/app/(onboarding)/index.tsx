@@ -20,7 +20,7 @@ export default function OnboardingFlow() {
     <OnboardingCategoryScreen onContinue={() => setStep(5)}/>,
     <OnboardingHabitScreen onContinue={() => {
       router.replace("signup")
-      console.log("HELLO")
+
     }}/>,
     
     

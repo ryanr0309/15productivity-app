@@ -28,7 +28,7 @@ export function AuthApple() {
                 provider: 'apple',
                 token: credential.identityToken,
               })
-              console.log(JSON.stringify({ error, user }, null, 2))
+
               if (!error) {
                 // Apple only provides the user's full name on the first sign-in
                 // Save it to user metadata if available
@@ -55,9 +55,9 @@ export function AuthApple() {
             }
           } catch (e) {
             if (e instanceof Error) {
-    console.log(e.message);
+
   } else {
-    console.log(e);
+
   }
           }
         }}

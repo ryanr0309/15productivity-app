@@ -159,7 +159,7 @@ async function saveTimeBlock({
 }
 
 
-console.log("BLOCKS THESE ARE THE BLOCKS", blocks)
+
 
 useEffect(() => {
   if (!openDay?.id) return;

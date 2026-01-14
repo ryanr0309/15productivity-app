@@ -29,7 +29,7 @@ export default function WelcomeScreen() {
 
         <Pressable
           style={styles.nextButton}
-          onPress={() => router.push("/(auth)/signup")}
+          onPress={() => router.push("/(onboarding)")}
         >
           <Ionicons name="arrow-forward" size={24} color="#000000" />
         </Pressable>

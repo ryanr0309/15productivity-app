@@ -110,7 +110,9 @@ export function DataProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { userId, authReady, onboardingCompleted, authReady: authLoading } = useAuth();
+  const { userId, authReady } = useAuth();
+  const authLoading = !authReady;
+
   const [categories, setCategories] = useState<Category[]>([]);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [userSettings, setUserSettings] =
@@ -144,7 +146,7 @@ useEffect(() => {
   
 
   async function preloadHome() {
-    console.log("📥 preloadHome start");
+  
   if (!userId) return;
 
   // 1️⃣ Fetch open day DIRECTLY (do not trust state)
@@ -162,7 +164,6 @@ useEffect(() => {
   }
 
   
-  console.log("📥 preloadHome: day =", day);
 
   // 2️⃣ Ensure blocks exist
   await ensureTimeBlocksExist(day);
@@ -181,7 +182,7 @@ useEffect(() => {
     return;
   }
 
-  console.log("📦 preloadHome blocks =", blocks?.length);
+
 
   // 4️⃣ Cache + mark ready
   setHomeCache({
@@ -190,7 +191,7 @@ useEffect(() => {
   });
 
   setHomeReady(true); // ✅ THIS IS WHAT YOU WERE MISSING
-  console.log("🏁 preloadHome done");
+
 
 }
 
@@ -465,12 +466,12 @@ useEffect(() => {
   if (!userId) return;
 
   // ❌ DO NOT preload app data until onboarding is complete
-  if (!authReady || !onboardingCompleted) return;
+  if (!authReady) return;
 
   preloadHome();
   preloadInsights();
   preloadLab();
-}, [userId, authReady, onboardingCompleted]);
+}, [userId, authReady]);
 
 
 

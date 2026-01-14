@@ -8,7 +8,6 @@ import { colors } from "../../../constants/colors";
 
 export default function TabsLayout() {
 
-  console.log("HITTING TABS LAYOUT")
   return (
     <Tabs
       screenOptions={{

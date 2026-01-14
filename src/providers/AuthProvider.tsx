@@ -1,12 +1,10 @@
-import { createContext, useEffect, useState, useRef } from "react";
+import { createContext, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import React from "react";
 
 type AuthContextType = {
   userId: string | null;
   authReady: boolean;
-  onboardingCompleted: boolean;
-
 };
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -14,51 +12,32 @@ export const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userId, setUserId] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [onboardingCompleted, setOnboardingCompleted] = useState(false);
-
-  const resolvedRef = useRef(false); // ✅ ADD THIS
-
 
   useEffect(() => {
-  let mounted = true;
+    let mounted = true;
 
-  async function hydrate() {
-    const { data: { session } } = await supabase.auth.getSession();
+    // 1️⃣ Initial hydration (handles cold app start)
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!mounted) return;
+      setUserId(session?.user?.id ?? null);
+      setAuthReady(true); // <- becomes ready only once real state known
+    })();
 
-    if (mounted) {
-      if (session?.user) {
-        setUserId(session.user.id);
-      } else {
-        setUserId(null);
-      }
-    }
+    // 2️⃣ Subscribe to future auth state (login/logout)
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setUserId(session?.user?.id ?? null);
+    });
 
-    setAuthReady(true); // only set here
-  }
-
-  hydrate();
-
-  const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-    if (!mounted) return;
-
-    if (session?.user) {
-      setUserId(session.user.id);
-    } else {
-      setUserId(null);
-    }
-  });
-
-  return () => {
-    mounted = false;
-    sub.subscription.unsubscribe();
-  };
-}, []);
-
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
 
   return (
-    <AuthContext.Provider
-      value={{ userId, authReady, onboardingCompleted}}
-    >
+    <AuthContext.Provider value={{ userId, authReady }}>
       {children}
     </AuthContext.Provider>
   );

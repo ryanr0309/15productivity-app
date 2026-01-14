@@ -1,117 +1,95 @@
-import React from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+// app/paywall/index.tsx
+import React, { useEffect, useState } from "react";
+import { View, Text, Pressable, ActivityIndicator, StyleSheet } from "react-native";
+import { Redirect } from "expo-router";
+import { useBilling } from "../../providers/BillingProvider";
 
 export default function PaywallScreen() {
-  const router = useRouter();
+  const {
+    loading,
+    isActive,
+    presentPaywall,
+    refreshCustomerInfo,
+  } = useBilling();
 
-  async function handleStartTrial() {
-    // TODO: plug RevenueCat here
-    // await startTrialWithRevenueCat();
+  const [shownOnce, setShownOnce] = useState(false);
 
-    // For now, simulate success:
-    router.replace("/(protected)/(tabs)");
+  // Show paywall on mount ONCE
+  useEffect(() => {
+    if (loading || shownOnce) return;
 
+    setShownOnce(true);
+    (async () => {
+      await presentPaywall();
+      await refreshCustomerInfo();
+    })();
+  }, [loading, shownOnce, presentPaywall, refreshCustomerInfo]);
+
+  // While billing is initializing
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
   }
 
+  // Entitlement active → go into app
+  if (isActive) {
+    return <Redirect href="/(protected)" />;
+  }
+
+  // Not active & paywall dismissed → simple blocking screen
   return (
-    <LinearGradient colors={["#0B1224", "#111B34"]} style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.header}>Unlock 15</Text>
-        <Text style={styles.sub}>
-          Start your 3-day free trial to see how 15 helps you track time, build habits, and improve productivity.
-        </Text>
+    <View style={styles.center}>
+      <Text style={styles.title}>Unlock Fifteen Pro</Text>
+      <Text style={styles.sub}>
+        Start your 3-day free trial to get access to Fifteen.
+      </Text>
 
-        <View style={styles.benefitBox}>
-          <Text style={styles.benefit}>✔ Track your day in 15-minute blocks</Text>
-          <Text style={styles.benefit}>✔ Categorize time across work & life</Text>
-          <Text style={styles.benefit}>✔ Build habits & align to goals</Text>
-          <Text style={styles.benefit}>✔ Get insights & productivity scores</Text>
-          <Text style={styles.benefit}>✔ AI suggestions tailored to your goals</Text>
-        </View>
-
-        <View style={styles.priceBox}>
-          <Text style={styles.priceTitle}>3-Day Free Trial</Text>
-          <Text style={styles.priceSub}>Then $X.XX/month. Cancel anytime.</Text>
-        </View>
-      </ScrollView>
-
-      <Pressable onPress={handleStartTrial} style={styles.button}>
-        <Text style={styles.buttonText}>Start Free Trial</Text>
+      <Pressable
+        style={styles.button}
+        onPress={async () => {
+          await presentPaywall();
+          await refreshCustomerInfo();
+        }}
+      >
+        <Text style={styles.buttonText}>View Subscription Options</Text>
       </Pressable>
-
-      <Pressable onPress={() => router.back()} style={styles.close}>
-        <Text style={styles.closeText}>Not now</Text>
-      </Pressable>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scroll: {
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 120,
-  },
-  header: {
-    color: "#FFFFFF",
-    fontSize: 30,
-    fontWeight: "700",
-    marginBottom: 12,
-  },
-  sub: {
-    color: "#B8C5E4",
-    fontSize: 15,
-    lineHeight: 20,
-    marginBottom: 24,
-  },
-  benefitBox: {
-    backgroundColor: "#151E36",
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 30,
-  },
-  benefit: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  priceBox: {
-    alignItems: "center",
-    marginBottom: 40,
-  },
-  priceTitle: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "600",
-  },
-  priceSub: {
-    color: "#8EA2C8",
-    fontSize: 14,
-    marginTop: 4,
-  },
-  button: {
-    height: 56,
-    marginHorizontal: 24,
-    borderRadius: 16,
-    backgroundColor: "#4DA3FF",
+  center: {
+    flex: 1,
+    backgroundColor: "#050816",
     justifyContent: "center",
     alignItems: "center",
+    padding: 24,
+  },
+  title: {
+    color: "white",
+    fontSize: 22,
+    fontWeight: "700",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  sub: {
+    color: "#9CA3AF",
+    fontSize: 14,
+    textAlign: "center",
     marginBottom: 24,
   },
+  button: {
+    backgroundColor: "#4F46E5",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 999,
+  },
   buttonText: {
-    color: "#0B1224",
-    fontWeight: "700",
-    fontSize: 17,
-  },
-  close: {
-    alignSelf: "center",
-    marginBottom: 40,
-  },
-  closeText: {
-    color: "#8EA2C8",
-    fontSize: 14,
+    color: "white",
+    fontWeight: "600",
   },
 });
+

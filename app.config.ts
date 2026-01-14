@@ -45,6 +45,7 @@ export default {
       EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
       SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
       SUPABASE_ANON_KEY: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+      EXPO_PUBLIC_REVENUECAT_API_KEY: "test_VIYxzZqAjKBCYFJNLnLaqNWEWeB",
 
       eas: {
         projectId: '4f8eb1c1-4947-4a21-9cbf-7118c8cd3c00',

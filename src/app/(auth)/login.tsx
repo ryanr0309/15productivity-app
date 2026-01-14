@@ -1,238 +1,135 @@
-import React, { useState } from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  ActivityIndicator,
-  Platform,
-} from "react-native";
-import { supabase } from "../../lib/supabase";
-
-import { useRouter } from "expo-router";
+import React, { useEffect } from "react";
+import { View, Text, Pressable, StyleSheet } from "react-native";
+import * as Google from "expo-auth-session/providers/google";
 import * as AppleAuthentication from "expo-apple-authentication";
-import * as WebBrowser from "expo-web-browser";
-import * as Linking from "expo-linking";
+import { supabase } from "../../lib/supabase";
+import { useRouter } from "expo-router";
+import Constants from "expo-constants";
+import LogoutButton from "../../components/auth/LogoutButton";
 
-
-WebBrowser.maybeCompleteAuthSession();
-
-
-
-export default function SignInScreen() {
-  const [loading, setLoading] = useState<"google" | "apple" | null>(null);
+export default function LoginScreen() {
   const router = useRouter();
+  const extra = Constants.expoConfig?.extra;
 
-  const redirectUri = Linking.createURL("auth/callback");
+  const [_, googleResponse, promptGoogle] = Google.useAuthRequest({
+    iosClientId: extra?.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+    webClientId: extra?.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+  });
 
-  // ---------------------------
-  // GOOGLE (unchanged)
-  // ---------------------------
-  async function handleGoogle() {
-    try {
-      setLoading("google");
+  async function finalizeLogin() {
+    const { data } = await supabase.auth.getUser();
+    const user = data?.user;
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: redirectUri },
-      });
+    if (!user) return;
 
-      if (error) {
-        console.log("Google OAuth error:", error);
-        return;
-      }
 
-      const authUrl = data?.url;
-      if (!authUrl) return;
 
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
-
-      if (result.type === "success" && result.url) {
-        const { data: sessionData, error: exchangeError } =
-          await supabase.auth.exchangeCodeForSession(result.url);
-
-        if (exchangeError) {
-          console.log("Session exchange error:", exchangeError);
-          return;
-        }
-
-        if (sessionData.session) {
-          console.log("SIGNED IN:", sessionData.session.user.id);
-          router.replace("/(tabs)");
-        }
-      }
-    } finally {
-      setLoading(null);
-    }
+    // paywall check later
+    router.replace("/(protected)");
   }
 
-  // ---------------------------
-  // APPLE (NATIVE FLOW)
-  // ---------------------------
-async function logOut(){
-  await supabase.auth.signOut();
+  // Google Response Handler
+  useEffect(() => {
+    (async () => {
+      if (googleResponse?.type !== "success") return;
 
-}
-async function handleApple() {
-  console.log("🍏 Apple Sign-In started");
+      const idToken = googleResponse.authentication?.idToken;
+      if (!idToken) return;
 
-  setLoading("apple");
+      const { error } = await supabase.auth.signInWithIdToken({
+        provider: "google",
+        token: idToken,
+      });
 
-  try {
-    // STEP 1 — Native Apple Auth
+      if (!error) {
+        await finalizeLogin();
+      }
+    })();
+  }, [googleResponse]);
+
+  async function handleApple() {
     const credential = await AppleAuthentication.signInAsync({
       requestedScopes: [
-        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
         AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
       ],
     });
 
-    console.log("🍏 Apple credential:", credential);
+    const { identityToken } = credential;
+    if (!identityToken) return;
 
-    if (!credential.identityToken) {
-      console.log("❌ Apple missing identityToken");
-      return;
-    }
-
-    if (!credential.authorizationCode) {
-      console.log("❌ Apple missing authorizationCode");
-      return;
-    }
-
-    // STEP 2 — Ensure deterministic email for linking
-    let email = credential.email ?? `${credential.user}@apple.local`;
-    console.log("📧 Apple email used:", email);
-
-    // STEP 3 — Check if Supabase user already logged in (manual link case)
-    const { data: sessionData } = await supabase.auth.getSession();
-    console.log("🟦 Existing Supabase session:", sessionData?.session);
-
-    if (sessionData?.session) {
-      console.log("🔗 Linking Apple identity to existing user");
-
-      const { data: linkData, error: linkError } = await supabase.auth.linkIdentity({
-        provider: "apple",
-        token: credential.identityToken,
-        access_token: credential.authorizationCode,
-      });
-
-      console.log("🔗 linkIdentity data:", linkData);
-      console.log("🔗 linkIdentity error:", linkError);
-
-      return;
-    }
-
-    // STEP 4 — Provision user (first time Apple login)
-    console.log("🆕 Provisioning new Apple user via signInWithIdToken");
-
-    const { data, error } = await supabase.auth.signInWithIdToken({
+    const { error } = await supabase.auth.signInWithIdToken({
       provider: "apple",
-      token: credential.identityToken,
-      access_token: credential.authorizationCode,
+      token: identityToken,
     });
 
-    console.log("🆕 signInWithIdToken data:", data);
-    console.log("🆕 signInWithIdToken error:", error);
 
-    // STEP 5 — Check if session was established
-    const { data: newSession } = await supabase.auth.getSession();
-    console.log("🔐 Session after provisioning:", newSession?.session);
-    console.log(newSession?.session?.user);
-
-
-    if (!newSession?.session) {
-      console.log("⚠️ No session after signIn — likely auto-linking prevented provisioning");
-      return;
+    if (!error) {
+      await finalizeLogin();
     }
-
-    // STEP 6 — Navigate to Paywall or Profile Setup
-    console.log("🚀 Apple Sign-In success:", newSession.session.user.id);
-    router.replace("/paywall");
-
-  } catch (e: any) {
-    if (e.code === "ERR_REQUEST_CANCELED") {
-      console.log("🚫 Apple Sign-In cancelled");
-    } else {
-      console.log("❌ Apple Sign-In error:", e);
-    }
-  } finally {
-    setLoading(null);
   }
-}
-
-
-
-
-
-
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome</Text>
-      <Text style={styles.sub}>Sign in to continue</Text>
+  <View style={styles.container}>
+    <View style={styles.content}>
+      <Text style={styles.title}>Login</Text>
 
-      {/* APPLE */}
-
-<AppleAuthentication.AppleAuthenticationButton
-  buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-  cornerRadius={8}
-  style={{ width: "100%", height: 50 }}
-  onPress={handleApple}
-/>
-
-
-      {/* GOOGLE */}
-      <Pressable
-        style={styles.oauthBtn}
-        onPress={handleGoogle}
-        disabled={loading !== null}
-      >
-        <Text style={styles.oauthText}>
-          {loading === "google" ? "Signing in..." : "Continue with Google"}
-        </Text>
+      <Pressable style={styles.apple} onPress={handleApple}>
+        <Text style={styles.btnText}>Continue with Apple</Text>
       </Pressable>
 
-      <Pressable style={styles.oauthBtn} onPress={logOut}>
-        <Text>Log Out</Text>
+      <Pressable style={styles.google} onPress={() => promptGoogle()}>
+        <Text style={styles.btnText}>Continue with Google</Text>
       </Pressable>
-
-      {loading && (
-        <ActivityIndicator color="white" style={{ marginTop: 20 }} />
-      )}
+      <LogoutButton/>
     </View>
-  );
+  </View>
+);
+
+
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "black",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
+    backgroundColor: "#0B1224", // optional for 15 aesthetic
+    justifyContent: "center",   // vertical center
+    alignItems: "center",       // horizontal center
+    paddingHorizontal: 24,
   },
+
+  content: {
+    width: "100%",              // buttons stretch to device width
+    maxWidth: 360,              // keeps it elegant
+    alignItems: "center",
+    gap: 16,
+  },
+
   title: {
-    fontSize: 32,
     color: "white",
+    fontSize: 26,
     fontWeight: "700",
-    marginBottom: 6,
+    marginBottom: 24,
   },
-  sub: {
-    color: "#999",
-    marginBottom: 40,
-    fontSize: 16,
-  },
-  oauthBtn: {
+
+  apple: {
     width: "100%",
-    padding: 14,
-    borderRadius: 8,
-    backgroundColor: "#1E1E1E",
-    marginBottom: 12,
+    backgroundColor: "#000",
+    paddingVertical: 14,
+    borderRadius: 10,
     alignItems: "center",
   },
-  oauthText: {
+
+  google: {
+    width: "100%",
+    backgroundColor: "#fff",
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+
+  btnText: {
+    fontWeight: "600",
     color: "white",
-    fontSize: 16,
   },
 });
