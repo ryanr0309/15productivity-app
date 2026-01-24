@@ -5,12 +5,16 @@ import {
   Pressable,
   StyleSheet,
   ScrollView,
+  Dimensions,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { CATEGORY_COLORS } from "../../constants/categoryColors";
 import { colors } from "../../constants/colors";
-import AddCategoryModal from "../../components/categories/AddCategoryModal";
+import { CATEGORY_COLORS } from "../../constants/categoryColors";
 import { useOnboarding } from "../../providers/OnboardingProvider";
+import AddCategoryModal from "../../components/categories/AddCategoryModal";
+
+
+const { width, height } = Dimensions.get("window");
 
 const PRESET_HABITS = [
   "🏋️ Gym",
@@ -33,31 +37,33 @@ const PRESET_HABITS = [
 type Props = {
   onContinue: () => void;
   onSkip?: () => void;
+  step?: number;
+  onBack?: () => void;
 };
 
-export default function OnboardingHabitScreen({ onContinue, onSkip }: Props) {
-  const { goals, categories, setHabits } = useOnboarding();
-
-  
+export default function OnboardingHabitScreen({
+  onContinue,
+  onSkip,
+  onBack,
+  step = 9,
+}: Props) {
+  const { setHabits } = useOnboarding();
 
   const MAX = 5;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [modalVisible, setModalVisible] = useState(false);
 
-  const habits = PRESET_HABITS.map((label, index) => ({
-    id: `habit-${index}`,
+  const habits = PRESET_HABITS.map((label, i) => ({
+    id: `habit-${i}`,
     label,
-    color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+    color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
   }));
 
   function toggle(id: string) {
     setSelected(prev => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else if (next.size < MAX) {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id);
+      else if (next.size < MAX) next.add(id);
       return next;
     });
   }
@@ -71,37 +77,63 @@ export default function OnboardingHabitScreen({ onContinue, onSkip }: Props) {
   function handleContinue() {
     const chosen = habits.filter(h => selected.has(h.id));
     const names = chosen.map(h => stripEmoji(h.label));
-
-    setHabits(names); // ← onboarding context
-
-    onContinue(); // ← step(4) for example
+    setHabits(names);
+    onContinue();
   }
 
   return (
-    <LinearGradient colors={["#0B1224", "#111B34"]} style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.header}>What habits are you working on?</Text>
-        <Text style={styles.sub}>Pick the things you want to show up for.</Text>
+    <LinearGradient
+      colors={["#050816", colors.background ?? "#0B1224", "#111827"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={styles.container}
+    >
+      {/* PROGRESS */}
+
+  <View style={styles.progressContainer}>
+    {Array.from({ length: 11 }).map((_, i) => (
+      <View
+        key={i}
+        style={[
+          styles.progressDot,
+          i + 1 <= step && styles.activeDot,
+        ]}
+      />
+    ))}
+  </View>
+
+
+      {/* CONTENT */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.headline}>
+          What habits are you working on?
+        </Text>
+
+        <Text style={styles.sub}>
+          Pick the things you want to show up for.
+        </Text>
 
         <View style={styles.chipContainer}>
           {habits.map(h => {
             const active = selected.has(h.id);
+
             return (
               <Pressable
                 key={h.id}
                 onPress={() => toggle(h.id)}
                 style={[
                   styles.chip,
-                  active && {
-                    borderWidth: 2,
-                    borderColor: "#F5D93D",
-                  },
+                  active && { backgroundColor: h.color },
                 ]}
               >
                 <Text
                   style={[
                     styles.chipText,
-                    active && { color: "white", fontWeight: "700" },
+                    active && { color: "#0B1224", fontWeight: "700" },
                   ]}
                 >
                   {h.label}
@@ -110,20 +142,24 @@ export default function OnboardingHabitScreen({ onContinue, onSkip }: Props) {
             );
           })}
 
+          {/* Add habit chip */}
           <Pressable style={styles.addChip} onPress={() => setModalVisible(true)}>
             <Text style={styles.addChipText}>+ Add Habit</Text>
           </Pressable>
         </View>
 
-        <Text style={styles.info}>You can add or change habits anytime.</Text>
+        <Text style={styles.infoText}>
+          You can add or change habits anytime.
+        </Text>
       </ScrollView>
 
+      {/* NEXT */}
       <Pressable
         disabled={!canContinue}
-        style={[styles.button, !canContinue && { opacity: 0.4 }]}
+        style={[styles.nextButton, !canContinue && { opacity: 0.4 }]}
         onPress={handleContinue}
       >
-        <Text style={styles.buttonText}>Continue</Text>
+        <Text style={styles.nextText}>Next</Text>
       </Pressable>
 
       {onSkip && (
@@ -132,12 +168,13 @@ export default function OnboardingHabitScreen({ onContinue, onSkip }: Props) {
         </Pressable>
       )}
 
+      {/* Add Habit Modal */}
       <AddCategoryModal
         visible={modalVisible}
         categories={[]}
         habits={habits}
         onCreate={({ label, color }) => {
-          // TODO: add custom habits if needed
+          // optional: custom habit support later
         }}
         onClose={() => setModalVisible(false)}
       />
@@ -146,43 +183,121 @@ export default function OnboardingHabitScreen({ onContinue, onSkip }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scroll: { paddingHorizontal: 24, paddingTop: 44, paddingBottom: 120 },
-  header: {
-    color: "white",
-    fontSize: 28,
-    fontWeight: "600",
-    marginBottom: 12,
-    lineHeight: 34,
+  container: {
+    flex: 1,
+    paddingTop: 80,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  sub: { color: "#B8C5E4", fontSize: 15, marginBottom: 28 },
-  chipContainer: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+
+  topRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 10,                 // spacing between arrow & bar
+  marginBottom: 20,
+  width: "100%",
+},
+
+  /** Progress **/
+  progressContainer: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 20,
+  },
+  progressDot: {
+    width: width * 0.07,
+    height: 4,
+    borderRadius: 4,
+    backgroundColor: "#2A2A2A",
+  },
+  activeDot: {
+    backgroundColor: "#FFF",
+  },
+
+  content: {
+    flexGrow: 1,
+    paddingTop: 10,
+    paddingBottom: 30,
+  },
+
+  headline: {
+    textAlign: "center",
+    fontSize: 24,
+    fontWeight: "700",
+    lineHeight: 32,
+    color: "#FFF",
+    marginBottom: 10,
+  },
+
+  sub: {
+    textAlign: "center",
+    fontSize: 15,
+    color: "#B8C5E4",
+    marginBottom: 24,
+  },
+
+  chipContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+
   chip: {
-    paddingVertical: 9,
+    paddingVertical: 10,
     paddingHorizontal: 14,
-    backgroundColor: "#151E36",
     borderRadius: 14,
+    backgroundColor: "rgba(15,23,42,0.85)",
   },
-  chipText: { color: "white", fontSize: 15, fontWeight: "600" },
+
+  chipText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+
   addChip: {
-    paddingVertical: 9,
+    paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 14,
     borderWidth: 1.2,
     borderColor: "#4DA3FF",
   },
-  addChipText: { color: "#4DA3FF", fontWeight: "600" },
-  info: { color: "#8EA2C8", marginTop: 20, fontSize: 14 },
-  button: {
-    height: 56,
-    marginHorizontal: 24,
-    marginBottom: 32,
-    borderRadius: 16,
-    backgroundColor: "#4DA3FF",
-    alignItems: "center",
-    justifyContent: "center",
+  addChipText: {
+    color: "#4DA3FF",
+    fontWeight: "600",
+    fontSize: 15,
   },
-  buttonText: { color: "#0B1224", fontWeight: "700", fontSize: 17 },
-  skip: { alignSelf: "center", marginBottom: 24 },
-  skipText: { color: "#8EA2C8", fontSize: 15 },
+
+  infoText: {
+    textAlign: "center",
+    color: "#8EA2C8",
+    fontSize: 14,
+    marginTop: 20,
+  },
+
+  nextButton: {
+    width: width * 0.88,
+    height: 56,
+    borderRadius: 100,
+    borderWidth: 1.5,
+    borderColor: "#FFF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 40,
+  },
+  nextText: {
+    color: "#FFF",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+
+  skip: {
+    alignSelf: "center",
+    marginBottom: 32,
+  },
+  skipText: {
+    color: "#8EA2C8",
+    fontSize: 15,
+  },
 });

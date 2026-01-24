@@ -9,20 +9,29 @@ export async function closeDay({
   endTime: Date;
   reason: "manual" | "auto";
 }): Promise<string> {
-  // 1️⃣ Close day
-  const { error } = await supabase
+  // 1️⃣ Close the day
+  const { error: dayError } = await supabase
     .from("days")
     .update({
       status: "closed",
       end_time: endTime.toISOString(),
-      closed_reason: reason, // optional but useful
+      closed_reason: reason,
     })
     .eq("id", dayId)
     .eq("status", "open");
 
-  if (error) throw error;
+  if (dayError) throw dayError;
 
-  // 2️⃣ Fire daily report — fire & forget
+  // 2️⃣ Mark all unlogged blocks as missed
+  const { error: blocksError } = await supabase
+    .from("time_blocks")
+    .update({ status: "missed" })
+    .eq("day_id", dayId)
+    .neq("status", "logged");
+
+  if (blocksError) throw blocksError;
+
+  // 3️⃣ Fire daily report (fire & forget)
   supabase.functions.invoke("analyze-day", {
     body: { dayId, reason },
   });

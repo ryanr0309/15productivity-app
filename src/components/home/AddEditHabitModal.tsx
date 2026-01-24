@@ -39,17 +39,18 @@ export default function AddHabitModal({
     ...habits.map(h => h.color),
   ];
 
-  useEffect(() => {
-    if (!visible) return;
+useEffect(() => {
+  if (!visible) return;
 
-    setName("");
+  setName("");
 
-    const firstAvailable = CATEGORY_COLORS.find(
-      c => !usedColors.includes(c)
-    );
+  const firstAvailable = CATEGORY_COLORS.find(
+    c => !usedColors.includes(c)
+  );
 
-    setSelectedColor(firstAvailable ?? null);
-  }, [visible, usedColors]);
+  setSelectedColor(firstAvailable ?? null);
+}, [visible]);
+
 
   async function handleSave() {
     if (!name.trim() || !selectedColor) return;

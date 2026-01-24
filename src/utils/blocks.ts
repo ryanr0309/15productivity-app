@@ -26,37 +26,43 @@ export function getCurrentBlock(blocks: Block[]) {
 
 export function normalizeBlocks(rows: any[]): Block[] {
   return rows.map((row) => {
-    const startISO = row.start_time;
-    const endISO = row.end_time;
+    const startDate = new Date(row.start_time);
+    const endDate = new Date(row.end_time);
 
-    const startDate = new Date(startISO);
-    const endDate = new Date(endISO);
+    const status =
+      (row.status as Block["status"]) ?? "upcoming";
 
     return {
       id: row.id,
 
       // LOGIC
-      startTime: startDate,
-      endTime: endDate,
+      startTime: new Date(row.start_time),
+      endTime: new Date(row.end_time),
+
+      // SOURCE OF TRUTH
+      status,
+      completed: status === "logged",
 
       // UI
-      timeLabel: `${formatTime(startISO)} – ${formatTime(endISO)}`,
+      timeLabel: `${formatTime(row.start_time)} – ${formatTime(row.end_time)}`,
 
-      completed: row.status === "logged",
-
-      // 🔑 BOTH INTENT + REALITY
+      // CATEGORY / HABIT
       categoryId: row.category_id ?? null,
-      habit_id: row.habit_id ?? null, // ✅ THIS FIXES EVERYTHING
+      habit_id: row.habit_id ?? null,
 
       description: row.description ?? "",
+      edit_count: row.edit_count ?? 0,
+
+      categoryLabel: row.category_label ?? null,
+      categoryColor: row.category_color ?? null,
+
+      // CLASSIFICATION
       classification: row.classification ?? "neutral",
       goalAlignment: row.goal_alignment ?? "none",
-      edit_count: row.edit_count ?? 0,
-      categoryColor: row.category_color ?? null,
-      categoryLabel: row.category_label ?? null
     };
   });
 }
+
 
 function getGenerationEnd(day: any, resolvedSleep: Date) {
   // If the day is already closed, respect it

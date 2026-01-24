@@ -6,26 +6,33 @@ import { getBlockDate } from "./time";
 export type Block = {
   id: string;
 
-  // 🔑 LOGIC (single source of truth)
+  // LOGIC
   startTime: Date;
   endTime: Date;
 
-  // 🔑 UI
+  // UI
   timeLabel: string;
 
+  // 🔑 SOURCE OF TRUTH
+  status: "upcoming" | "active" | "logged" | "missed";
+
+  // 🔁 DERIVED (never persisted)
   completed: boolean;
+
+  // CATEGORY / HABIT
   categoryId: string | null;
+  habit_id: string | null;
+
   description: string;
   edit_count: number;
   categoryLabel: string | null;
   categoryColor: string | null;
 
-
-  // 🧠 NEW — classification system
+  // CLASSIFICATION
   classification: "productive" | "neutral" | "unproductive";
   goalAlignment: "strong" | "partial" | "none";
-  habit_id: string | null
 };
+
 
 
 
@@ -38,15 +45,22 @@ type BlockState =
 
 
 
-export function getBlockState(block: Block, now = Date.now()) {
+export function getBlockState(
+  block: Block,
+  now = Date.now()
+): BlockState {
+  if (block.status === "logged") return "completed";
+  if (block.status === "missed") return "missed";
+
   const start = block.startTime.getTime();
   const end = block.endTime.getTime();
 
-  if (block.completed) return "completed";
   if (now >= start && now < end) return "active";
   if (now >= end) return "missed";
+
   return "upcoming";
 }
+
 
 export function didCompletePlannedHabit(block: Block) {
   return (

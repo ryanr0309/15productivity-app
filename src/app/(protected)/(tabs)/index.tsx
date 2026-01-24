@@ -30,6 +30,8 @@ import { Habit } from "../../../constants/habits";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Block } from "../../../utils/timeBlocks";
 import { closeDay } from "../../../utils/dayLifecycle";
+import HomeAnalyticsLoading from "../../../components/home/HomeAnalyticsLoading";
+import AnalyticsSummarySheet from "../../../components/home/AnalyticsSummarySheet";
 
 
 const colors = {
@@ -45,6 +47,12 @@ const colors = {
   danger: "#EF4444",
 };
 
+type PostDayState =
+  | "idle"
+  | "closing"
+  | "analyzing"
+  | "show_summary"
+  | "cooldown";
 
 
 
@@ -64,10 +72,14 @@ export default function Home() {
   habits,
   homeCache,
   homeReady,
-  markHomeReady
+  markHomeReady,
+  insightsCache,
+  fetchInsights
 } = useData();
 
 
+const [postDayState, setPostDayState] =
+  useState<PostDayState>("idle");
 
 const initial: Block[] =
   openDay?.id &&
@@ -98,6 +110,9 @@ const initial: Block[] =
   const remainingMs = earliestSleepTime ? Math.max(earliestSleepTime.getTime() - now.getTime(), 0) : 0;
   const heroBlock = openDay ? getCurrentBlock(blocks) : null;
   const activeBlock = activeBlockIndex !== null ? blocks[activeBlockIndex] : null;
+  const [dayNumber, setDayNumber] = useState<number | null>(null);
+  const [summaryDayId, setSummaryDayId] = useState<string | null>(null);
+
 
   const { userId } = useAuth();
 
@@ -184,28 +199,67 @@ useEffect(() => {
 
 
 async function handleConfirmSleep(sleepTime: Date) {
-  if (!userId) return;
+  if (!openDay || !userId) return;
 
-  try {
-    const dayId = await closeDay({
-  dayId: openDay.id,
-  endTime: sleepTime,
-  reason: "manual",
-});
+  setPostDayState("analyzing");
 
+  const dayId = await closeDay({
+    dayId: openDay.id,
+    endTime: sleepTime,
+    reason: "manual",
+  });
 
-    // 3️⃣ Close modal
-    setIsSleepModalOpen(false);
+  await waitForDailyReport(supabase, dayId);
+  await fetchInsights(userId);
 
-    // 4️⃣ Refresh state (day-level only)
-    await reloadOpenDay();
-    await loadCooldown();
-  } catch (err) {
-    console.error("Failed to log sleep", err);
-  }
+  setSummaryDayId(dayId);            // ✅ store the closed day id
+  setPostDayState("show_summary");   // ✅ now open sheet
 }
 
 
+
+
+useEffect(() => {
+  async function loadDayNumber() {
+    if (!userId) return;
+
+    const { count, error } = await supabase
+      .from("days")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId);
+
+    if (!error && typeof count === "number") {
+      setDayNumber(count);
+    }
+  }
+
+  loadDayNumber();
+}, [userId]);
+
+
+
+async function waitForDailyReport(
+  supabase: any,
+  dayId: string,
+  timeoutMs = 15000
+): Promise<any | null> {
+  const start = Date.now();
+
+  while (Date.now() - start < timeoutMs) {
+    const { data } = await supabase
+      .from("daily_reports")
+      .select("*")
+      .eq("day_id", dayId)
+      .maybeSingle();
+
+    if (data) return data;
+
+    // wait 750ms before next check
+    await new Promise(res => setTimeout(res, 750));
+  }
+
+  return null;
+}
 
 
 function handleOpenBlock(blockIndex: number) {
@@ -254,9 +308,10 @@ function renderContent() {
     value={openDay ? formatTime(openDay.start_time) : "—"}
   />
   <ContextPill
-    label="Streaks ⏱"
-    value="5 days"
-  />
+  label="Day ⏱"
+  value={dayNumber !== null ? `Day ${dayNumber}` : "—"}
+/>
+
   <ContextPill
     label="Sleep 😴"
     value={
@@ -410,6 +465,10 @@ function renderContent() {
   );
 }
 
+if (postDayState === "closing" || postDayState === "analyzing") {
+  return <HomeAnalyticsLoading/>;
+}
+
 
       return (
   <SafeAreaView style={styles.safe}>
@@ -438,6 +497,13 @@ function renderContent() {
       </ScrollView>
     )}
      {/* MODAL */}
+
+      <AnalyticsSummarySheet
+  visible={postDayState === "show_summary"}
+  dayId={openDay?.id}
+  onDismiss={() => setPostDayState("cooldown")}
+/>
+
       {activeBlock && openDay && (
         
   <Modal
@@ -456,7 +522,8 @@ function renderContent() {
     propagateSwipe // 👈 IMPORTANT if modal scrolls
     avoidKeyboard
   >
- 
+
+
   <TimeBlockModal
     blockId={activeBlock.id}
     timeRange={activeBlock.timeLabel}
@@ -498,7 +565,7 @@ function renderContent() {
       setIsSleepModalOpen(false);
       
     }}
-  onHidden={() => setIsSleepModalOpen(false)} // 👈 FORCE RELEASE
+
   onConfirm={handleConfirmSleep}
 />
 </Modal>

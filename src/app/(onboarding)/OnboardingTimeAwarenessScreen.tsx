@@ -1,7 +1,17 @@
 import React, { useState } from "react";
-import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  ScrollView,
+  Dimensions,
+} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors } from "../../constants/colors";
+
+
+const { width, height } = Dimensions.get("window");
 
 const OPTIONS = [
   {
@@ -34,25 +44,47 @@ const OPTIONS = [
 type Props = {
   onContinue: (choice: string) => void;
   onSkip?: () => void;
+  onBack?: () => void;
+  step?: number;
 };
 
 export default function OnboardingTimeAwarenessScreen({
   onContinue,
   onSkip,
+  onBack,
+  step = 3,
 }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
 
   return (
     <LinearGradient
-      colors={["#0B1224", "#111B34"]}
+      colors={["#050816", colors.background ?? "#0B1224", "#111827"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.header}>
+      {/* PROGRESS */}
+
+      <View style={styles.progressContainer}>
+        {Array.from({ length: 11 }).map((_, i) => (
+          <View
+            key={i}
+            style={[
+              styles.progressDot,
+              i + 1 <= step && styles.activeDot,
+            ]}
+          />
+        ))}
+      </View>
+
+      {/* CONTENT */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.headline}>
           How clearly do you understand where your time goes?
-        </Text>
-        <Text style={styles.subtext}>
-          Be honest — most people lose hours without realizing it.
         </Text>
 
         <View style={styles.options}>
@@ -61,10 +93,18 @@ export default function OnboardingTimeAwarenessScreen({
             return (
               <Pressable
                 key={opt.key}
-                style={[styles.card, active && styles.cardActive]}
+                style={[
+                  styles.card,
+                  active && styles.cardActive,
+                ]}
                 onPress={() => setSelected(opt.key)}
               >
-                <Text style={[styles.cardTitle, active && styles.cardTitleActive]}>
+                <Text
+                  style={[
+                    styles.cardTitle,
+                    active && styles.cardTitleActive,
+                  ]}
+                >
                   {opt.title}
                 </Text>
 
@@ -77,15 +117,16 @@ export default function OnboardingTimeAwarenessScreen({
         </View>
       </ScrollView>
 
+      {/* NEXT */}
       <Pressable
         disabled={!selected}
         style={[
-          styles.button,
-          !selected && styles.buttonDisabled,
+          styles.nextButton,
+          !selected && { opacity: 0.4 },
         ]}
         onPress={() => selected && onContinue(selected)}
       >
-        <Text style={styles.buttonText}>Continue</Text>
+        <Text style={styles.nextText}>Next</Text>
       </Pressable>
     </LinearGradient>
   );
@@ -94,65 +135,88 @@ export default function OnboardingTimeAwarenessScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 80,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  scroll: {
-    paddingHorizontal: 24,
-    paddingTop: 40,
-    paddingBottom: 100,
+
+  /** Progress **/
+  progressContainer: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 20,
   },
-  header: {
-    fontSize: 28,
-    fontWeight: "600",
-    color: "#FFFFFF",
-    marginBottom: 10,
+  progressDot: {
+    width: width * 0.07,
+    height: 4,
+    borderRadius: 4,
+    backgroundColor: "#2A2A2A",
   },
-  subtext: {
-    fontSize: 16,
-    color: "#B8C5E4",
-    marginBottom: 28,
+  activeDot: {
+    backgroundColor: "#FFF",
   },
+
+  /** Content **/
+  content: {
+    flexGrow: 1,
+    paddingTop: 10,
+    paddingBottom: 30,
+  },
+
+  headline: {
+    textAlign: "center",
+    fontSize: 24,
+    fontWeight: "700",
+    lineHeight: 32,
+    color: "#FFF",
+    marginBottom: 24,
+    paddingHorizontal: 12,
+  },
+
   options: {
-    gap: 12,
+    gap: 14,
+    marginBottom: 24,
   },
+
   card: {
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    backgroundColor: "#151E36",
+    borderRadius: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    backgroundColor: "rgba(15,23,42,0.85)",
   },
   cardActive: {
-    borderWidth: 1.5,
-    borderColor: "#4DA3FF",
+    backgroundColor: "#FFFFFF",
   },
   cardTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: "#E5E7EB",
   },
   cardTitleActive: {
-    color: "#4DA3FF",
+    color: "#020617",
   },
   cardDesc: {
-    fontSize: 14,
-    color: "#BFD4F4",
     marginTop: 6,
+    fontSize: 14,
     lineHeight: 20,
+    color: "#4B5563",
   },
-  button: {
+
+  /** Button **/
+  nextButton: {
+    width: width * 0.88,
     height: 56,
-    marginHorizontal: 24,
-    marginBottom: 32,
-    borderRadius: 16,
-    backgroundColor: "#4DA3FF",
+    borderRadius: 100,
+    borderWidth: 1.5,
+    borderColor: "#FFF",
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: 40,
   },
-  buttonDisabled: {
-    opacity: 0.4,
-  },
-  buttonText: {
-    color: "#0B1224",
-    fontSize: 17,
-    fontWeight: "700",
+  nextText: {
+    color: "#FFF",
+    fontSize: 18,
+    fontWeight: "600",
   },
 });

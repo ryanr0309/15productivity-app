@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, Pressable, StyleSheet, Alert } from "react-native";
 import * as Google from "expo-auth-session/providers/google";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { supabase } from "../../lib/supabase";
@@ -8,6 +8,8 @@ import Constants from "expo-constants";
 import LogoutButton from "../../components/auth/LogoutButton";
 
 export default function LoginScreen() {
+  console.log("LoginScreen rendered");
+
   const router = useRouter();
   const extra = Constants.expoConfig?.extra;
 
@@ -16,19 +18,32 @@ export default function LoginScreen() {
     webClientId: extra?.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
   });
 
-  async function finalizeLogin() {
-    const { data } = await supabase.auth.getUser();
-    const user = data?.user;
+  /* ---------------- POST-LOGIN ROUTER ---------------- */
 
-    if (!user) return;
+async function handlePostLogin(userId: string) {
 
 
+  const { data: userRow } = await supabase
+    .from("users")
+    .select("onboarding_completed")
+    .eq("id", userId)
+    .maybeSingle();
 
-    // paywall check later
-    router.replace("/(protected)");
+     Alert.alert("PostLogin", JSON.stringify(userRow));
+  console.log("login routing:", userRow);
+
+  if (!userRow || userRow.onboarding_completed !== true) {
+    router.replace("/(onboarding)");
+    return;
   }
 
-  // Google Response Handler
+  router.replace("/(tabs)");
+}
+
+
+
+  /* ---------------- GOOGLE LOGIN ---------------- */
+
   useEffect(() => {
     (async () => {
       if (googleResponse?.type !== "success") return;
@@ -36,16 +51,21 @@ export default function LoginScreen() {
       const idToken = googleResponse.authentication?.idToken;
       if (!idToken) return;
 
-      const { error } = await supabase.auth.signInWithIdToken({
+      const { data, error } = await supabase.auth.signInWithIdToken({
         provider: "google",
         token: idToken,
       });
 
-      if (!error) {
-        await finalizeLogin();
+      if (error || !data?.user) {
+        console.error("Google sign-in failed", error);
+        return;
       }
+
+      await handlePostLogin(data.user.id);
     })();
   }, [googleResponse]);
+
+  /* ---------------- APPLE LOGIN ---------------- */
 
   async function handleApple() {
     const credential = await AppleAuthentication.signInAsync({
@@ -55,52 +75,56 @@ export default function LoginScreen() {
       ],
     });
 
-    const { identityToken } = credential;
-    if (!identityToken) return;
+    if (!credential.identityToken) return;
 
-    const { error } = await supabase.auth.signInWithIdToken({
+    const { data, error } = await supabase.auth.signInWithIdToken({
       provider: "apple",
-      token: identityToken,
+      token: credential.identityToken,
     });
 
-
-    if (!error) {
-      await finalizeLogin();
+    if (error || !data?.user) {
+      console.error("Apple sign-in failed", error);
+      return;
     }
+
+    await handlePostLogin(data.user.id);
   }
 
+  /* ---------------- UI ---------------- */
+
   return (
-  <View style={styles.container}>
-    <View style={styles.content}>
-      <Text style={styles.title}>Login</Text>
+    <View style={styles.container}>
+      <View style={styles.content}>
+        <Text style={styles.title}>Login</Text>
 
-      <Pressable style={styles.apple} onPress={handleApple}>
-        <Text style={styles.btnText}>Continue with Apple</Text>
-      </Pressable>
+        <Pressable style={styles.apple} onPress={handleApple}>
+          <Text style={styles.appleText}>Continue with Apple</Text>
+        </Pressable>
 
-      <Pressable style={styles.google} onPress={() => promptGoogle()}>
-        <Text style={styles.btnText}>Continue with Google</Text>
-      </Pressable>
-      <LogoutButton/>
+        <Pressable style={styles.google} onPress={() => promptGoogle()}>
+          <Text style={styles.googleText}>Continue with Google</Text>
+        </Pressable>
+
+        <LogoutButton />
+      </View>
     </View>
-  </View>
-);
-
-
+  );
 }
+
+/* ---------------- STYLES ---------------- */
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0B1224", // optional for 15 aesthetic
-    justifyContent: "center",   // vertical center
-    alignItems: "center",       // horizontal center
+    backgroundColor: "#0B1224",
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 24,
   },
 
   content: {
-    width: "100%",              // buttons stretch to device width
-    maxWidth: 360,              // keeps it elegant
+    width: "100%",
+    maxWidth: 360,
     alignItems: "center",
     gap: 16,
   },
@@ -114,7 +138,7 @@ const styles = StyleSheet.create({
 
   apple: {
     width: "100%",
-    backgroundColor: "#000",
+    backgroundColor: "#FFFFFF",
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center",
@@ -122,14 +146,21 @@ const styles = StyleSheet.create({
 
   google: {
     width: "100%",
-    backgroundColor: "#fff",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center",
   },
 
-  btnText: {
+  appleText: {
     fontWeight: "600",
-    color: "white",
+    color: "#000000",
+  },
+
+  googleText: {
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 });

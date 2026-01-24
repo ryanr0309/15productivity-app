@@ -5,11 +5,15 @@ import {
   Pressable,
   StyleSheet,
   ScrollView,
+  Dimensions,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors } from "../../constants/colors";
 import { CATEGORY_COLORS } from "../../constants/categoryColors";
 import { useOnboarding } from "../../providers/OnboardingProvider";
+
+
+const { width, height } = Dimensions.get("window");
 
 const PRESET_LABELS = [
   "💼 Work",
@@ -32,59 +36,82 @@ const PRESET_LABELS = [
 type Props = {
   onContinue: () => void;
   onSkip?: () => void;
+  step?: number;
+  onBack?: () => void;
 };
 
-export default function OnboardingCategoryScreen({ onContinue, onSkip }: Props) {
+export default function OnboardingCategoryScreen({
+  onContinue,
+  onSkip,
+  onBack,
+  step = 7,
+}: Props) {
   const { setCategories } = useOnboarding();
-
   const MAX_SELECT = 10;
+
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const categories = PRESET_LABELS.map((label, i) => ({
+    id: `preset-${i}`,
+    label,
+    color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+  }));
 
   function toggleCategory(id: string) {
     setSelected(prev => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else if (next.size < MAX_SELECT) {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id);
+      else if (next.size < MAX_SELECT) next.add(id);
       return next;
     });
   }
 
   const canContinue = selected.size >= 3;
 
-  const categories = PRESET_LABELS.map((label, index) => ({
-    id: `preset-${index}`,
-    label,
-    color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
-  }));
-
   function stripEmoji(label: string) {
-    return label.replace(/^[^\w]+/g, "").trim(); // removes emoji + spaces
+    return label.replace(/^[^\w]+/g, "").trim();
   }
 
   function handleContinue() {
     const chosen = categories.filter(c => selected.has(c.id));
-
-    // Extract onboarding-friendly strings
-    const labels = chosen.map(c => stripEmoji(c.label));
-
-    // Write to onboarding context
-    setCategories(labels);
-
-    // Proceed to next onboarding step (parent handles step)
+    setCategories(chosen.map(c => stripEmoji(c.label)));
     onContinue();
   }
 
   return (
-    <LinearGradient colors={["#0B1224", "#111B34"]} style={styles.container}>
+    <LinearGradient
+      colors={["#050816", colors.background ?? "#0B1224", "#111827"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={styles.container}
+    >
+      {/* PROGRESS */}
+
+      <View style={styles.progressContainer}>
+        {Array.from({ length: 11 }).map((_, i) => (
+          <View
+            key={i}
+            style={[
+              styles.progressDot,
+              i + 1 <= step && styles.activeDot,
+            ]}
+          />
+        ))}
+      </View>
+
+      {/* CONTENT */}
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.header}>How do you usually spend your days?</Text>
-        <Text style={styles.sub}>Pick the categories that match your life.</Text>
+        <Text style={styles.headline}>
+          How do you usually spend your days?
+        </Text>
+
+        <Text style={styles.sub}>
+          Pick the categories that match your life.
+        </Text>
 
         <View style={styles.chipContainer}>
           {categories.map(cat => {
@@ -111,20 +138,26 @@ export default function OnboardingCategoryScreen({ onContinue, onSkip }: Props) 
             );
           })}
         </View>
+
+        <Text style={styles.infoText}>
+          You can edit categories later.
+        </Text>
       </ScrollView>
 
-      <Text style={styles.infoText}>You can edit categories later.</Text>
-
+      {/* NEXT */}
       <Pressable
         disabled={!canContinue}
         onPress={handleContinue}
-        style={[styles.button, !canContinue && styles.buttonDisabled]}
+        style={[
+          styles.nextButton,
+          !canContinue && { opacity: 0.4 },
+        ]}
       >
-        <Text style={styles.buttonText}>Continue</Text>
+        <Text style={styles.nextText}>Next</Text>
       </Pressable>
 
       {onSkip && (
-        <Pressable onPress={onSkip} style={styles.skip}>
+        <Pressable style={styles.skip} onPress={onSkip}>
           <Text style={styles.skipText}>Skip</Text>
         </Pressable>
       )}
@@ -133,84 +166,100 @@ export default function OnboardingCategoryScreen({ onContinue, onSkip }: Props) 
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scroll: {
-    paddingHorizontal: 24,
-    paddingTop: 44,
-    paddingBottom: 120,
+  container: {
+    flex: 1,
+    paddingTop: 80,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  header: {
-    color: "#FFFFFF",
-    fontSize: 28,
-    fontWeight: "600",
-    marginBottom: 12,
-    lineHeight: 34,
+
+  /** Progress **/
+  progressContainer: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 20,
   },
-  infoText: {
-  color: "#8EA2C8",
-  fontSize: 14,
-  marginTop: 12,
-  marginBottom: 16,
-},
+  progressDot: {
+    width: width * 0.07,
+    height: 4,
+    borderRadius: 4,
+    backgroundColor: "#2A2A2A",
+  },
+  activeDot: {
+    backgroundColor: "#FFF",
+  },
+
+  /** Content **/
+  content: {
+    flexGrow: 1,
+    paddingTop: 10,
+    paddingBottom: 30,
+  },
+
+  headline: {
+    textAlign: "center",
+    fontSize: 24,
+    fontWeight: "700",
+    lineHeight: 32,
+    color: "#FFF",
+    marginBottom: 10,
+  },
 
   sub: {
-    color: "#B8C5E4",
+    textAlign: "center",
     fontSize: 15,
-    marginBottom: 28,
+    color: "#B8C5E4",
+    marginBottom: 24,
   },
+
   chipContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
   },
-chip: {
-  paddingVertical: 10,
-  paddingHorizontal: 14,
-  borderRadius: 14,
-  backgroundColor: "#151E36", // consistent onboarding UI
-},
-chipSelected: {
-  borderWidth: 1.5,
-  borderColor: "#4DA3FF",
-},
-chipText: {
-  color: "#FFFFFF",
-  fontSize: 15,
-  fontWeight: "600",
-},
 
-  addChip: {
-    paddingHorizontal: 14,
+  chip: {
     paddingVertical: 10,
-    borderRadius: 16,
-    borderWidth: 1.2,
-    borderColor: "#4DA3FF",
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: "rgba(15,23,42,0.85)",
   },
-  addChipText: {
-    color: "#4DA3FF",
-    fontSize: 14,
+
+  chipText: {
+    color: "#FFFFFF",
+    fontSize: 15,
     fontWeight: "600",
   },
-  button: {
+
+  infoText: {
+    textAlign: "center",
+    color: "#8EA2C8",
+    fontSize: 14,
+    marginTop: 16,
+    marginBottom: 16,
+  },
+
+  /** Buttons **/
+  nextButton: {
+    width: width * 0.88,
     height: 56,
-    marginHorizontal: 24,
-    marginBottom: 32,
-    borderRadius: 16,
-    backgroundColor: "#4DA3FF",
-    alignItems: "center",
+    borderRadius: 100,
+    borderWidth: 1.5,
+    borderColor: "#FFF",
     justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 40,
   },
-  buttonDisabled: {
-    opacity: 0.4,
+  nextText: {
+    color: "#FFF",
+    fontSize: 18,
+    fontWeight: "600",
   },
-  buttonText: {
-    color: "#0B1224",
-    fontWeight: "700",
-    fontSize: 17,
-  },
+
   skip: {
     alignSelf: "center",
-    marginBottom: 24,
+    marginBottom: 32,
   },
   skipText: {
     color: "#8EA2C8",

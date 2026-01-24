@@ -1,4 +1,4 @@
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, Text } from "react-native";
 import React from "react";
 
 export default function InsightsSkeleton() {
@@ -9,6 +9,7 @@ export default function InsightsSkeleton() {
         <View style={styles.icon} />
         <View style={styles.headerText} />
       </View>
+      
 
       {/* Date strip */}
       <View style={styles.dateStrip} />

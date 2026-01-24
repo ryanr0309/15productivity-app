@@ -1,13 +1,15 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
   Pressable,
   StyleSheet,
   SafeAreaView,
+  Animated,
 } from "react-native";
 import DateTimePickerModal from "react-native-modal-datetime-picker";
 import * as Haptics from "expo-haptics";
+import LottieView from "lottie-react-native";
 
 type Props = {
   onBeginDay: (estimatedSleep: Date) => Promise<void>;
@@ -17,53 +19,70 @@ export default function BeginDayScreen({ onBeginDay }: Props) {
   const [sleepTime, setSleepTime] = useState<Date | null>(null);
   const [pickerVisible, setPickerVisible] = useState(false);
 
-  const now = new Date();
+  const bounce = useRef(new Animated.Value(0)).current;
 
-  // Rules:
-  const MIN_MS = 6 * 60 * 60 * 1000;   // 6 hours
-  const MAX_MS = 36 * 60 * 60 * 1000;  // 36 hours
+  const now = new Date();
+  const MIN_MS = 6 * 60 * 60 * 1000;
+  const MAX_MS = 36 * 60 * 60 * 1000;
 
   const minDate = new Date(now.getTime() + MIN_MS);
   const maxDate = new Date(now.getTime() + MAX_MS);
 
   function handleConfirm(date: Date) {
+    Haptics.selectionAsync();
     setPickerVisible(false);
     setSleepTime(date);
+
+    Animated.spring(bounce, {
+      toValue: 1,
+      useNativeDriver: true,
+      tension: 120,
+      friction: 7,
+    }).start(() => bounce.setValue(0));
   }
 
   async function handleBegin() {
     if (!sleepTime) return;
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await onBeginDay(sleepTime);
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* MAIN CONTENT */}
-      <View style={styles.content}>
+
+      {/* HERO */}
+      <View style={styles.hero}>
+        <LottieView
+          autoPlay
+          loop
+          style={{ width: 280, height: 280 }}
+          source={require("../../assets/animations/sunrise.json")}
+        />
+
         <Text style={styles.title}>Begin Your Day</Text>
         <Text style={styles.subtitle}>
-          Small consistent decisions lead to extraordinary progress.
+          Intentional mornings lead to unstoppable days.
         </Text>
-
-        {/* SLEEP PICKER */}
-        <Pressable onPress={() => setPickerVisible(true)}>
-          <View style={styles.selector}>
-            <Text style={styles.selectorLabel}>Estimated Sleep Time</Text>
-            <Text style={styles.selectorValue}>
-              {sleepTime
-                ? sleepTime.toLocaleString([], {
-                    hour: "numeric",
-                    minute: "2-digit",
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                  })
-                : "Select"}
-            </Text>
-          </View>
-        </Pressable>
       </View>
+
+      {/* SELECTOR */}
+      <Pressable onPress={() => setPickerVisible(true)} style={styles.selectorCard}>
+        <View style={styles.selectorRow}>
+          <Text style={styles.selectorLabel}>Estimated Sleep</Text>
+
+          <Text style={styles.selectorValue}>
+            {sleepTime
+              ? sleepTime.toLocaleString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                })
+              : "Select"}
+          </Text>
+        </View>
+      </Pressable>
 
       {/* CTA */}
       <View style={styles.ctaContainer}>
@@ -76,19 +95,15 @@ export default function BeginDayScreen({ onBeginDay }: Props) {
             !sleepTime && styles.buttonDisabled,
           ]}
         >
-          <Text style={styles.buttonText}>Begin Day</Text>
+          <Text style={styles.buttonText}>Launch Day →</Text>
         </Pressable>
       </View>
 
-      {/* DATE PICKER */}
       <DateTimePickerModal
-      
         isVisible={pickerVisible}
         date={sleepTime ?? minDate}
         mode="datetime"
-        display="spinner"          // optional but recommended
-        themeVariant="light"
-        isDarkModeEnabled={false}
+        display="spinner"
         minimumDate={minDate}
         maximumDate={maxDate}
         onConfirm={handleConfirm}
@@ -101,68 +116,78 @@ export default function BeginDayScreen({ onBeginDay }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0B1220",
+    backgroundColor: "",
   },
-  content: {
-    flex: 1,
-    justifyContent: "center",
+
+  hero: {
+    alignItems: "center",
+    marginTop: 40,
+    marginBottom: 24,
     paddingHorizontal: 28,
-    transform: [{ translateY: -40 }],
   },
 
   title: {
-    fontSize: 28,
+    fontSize: 30,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginTop: -8,
+  },
+
+  subtitle: {
+    fontSize: 16,
+    color: "#B0B8D4",
+    marginTop: 8,
+    textAlign: "center",
+    lineHeight: 22,
+    maxWidth: 260,
+  },
+
+  selectorCard: {
+    marginHorizontal: 28,
+    marginTop: 32,
+    borderRadius: 20,
+    padding: 18,
+    backgroundColor: "#141A2B",
+    borderColor: "#273450",
+    borderWidth: 1,
+  },
+
+  selectorRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  selectorLabel: {
+    fontSize: 14,
+    color: "#CBD3EA",
+  },
+  selectorValue: {
+    fontSize: 18,
     fontWeight: "600",
     color: "#FFFFFF",
-    marginBottom: 12,
   },
-  subtitle: {
-    fontSize: 17,
-    fontWeight: "400",
-    color: "#B0B8D4",
-    maxWidth: "80%",
-    lineHeight: 24,
-    marginBottom: 28,
-  },
-  selector: {
-  borderRadius: 16,
-  padding: 16,
-  backgroundColor: "#1A2337",   // darker, less gray-blue
-  borderWidth: 1,
-  borderColor: "#3A475F",       // clearer boundary
-},
-
-selectorLabel: {
-  fontSize: 14,
-  color: "#CBD3EA",             // brighter secondary
-  marginBottom: 6,
-},
-
-selectorValue: {
-  fontSize: 17,
-  fontWeight: "600",
-  color: "#FFFFFF",             // full white
-},
 
   ctaContainer: {
-    paddingHorizontal: 24,
-    paddingBottom: 28,
+    marginTop: "auto",
+    paddingHorizontal: 28,
+    paddingBottom: 36,
   },
   button: {
-    height: 60,
+    height: 62,
     borderRadius: 20,
     backgroundColor: "#4DA3FF",
     alignItems: "center",
     justifyContent: "center",
   },
   buttonDisabled: {
-    opacity: 0.3,
+    opacity: 0.28,
   },
   buttonPressed: {
     transform: [{ scale: 0.96 }],
   },
   buttonText: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: "700",
     color: "#0B1220",
   },

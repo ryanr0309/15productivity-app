@@ -31,6 +31,8 @@ import { useScrollToTop } from "@react-navigation/native";
 import { useCallback} from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import InsightsSkeleton from "../../../components/insights/InsightsSkeleton";
+import AnimatedTabWrapper from "../../../components/AnimatedTabWrapper";
+import InsightsEmptyState from "../../../components/insights/InsightsEmptyState";
 
 const colors = {
   background: "#0B1224",
@@ -67,21 +69,29 @@ export default function Insights() {
   const { insightsCache } = useData();
 
 
-  useEffect(() => {
+useEffect(() => {
   if (!insightsCache) return;
 
-  setDays(insightsCache.days);
+  const hydratedDays = insightsCache.days ?? [];
+  setDays(hydratedDays);
 
-  const latestIndex = insightsCache.days.length - 1;
+  const latestIndex = hydratedDays.length - 1;
   setSelectedIndex(latestIndex);
 
-  blocksCacheRef.current = {
-    ...insightsCache.blocksByDayId,
-  };
-  reportCacheRef.current = {
-    ...insightsCache.reportsByDayId,
-  };
+  blocksCacheRef.current = { ...insightsCache.blocksByDayId };
+  reportCacheRef.current = { ...insightsCache.reportsByDayId };
+
+  const latestDayId = hydratedDays[latestIndex]?.id;
+
+  // ✅ set initial UI state immediately
+  setBlocks(latestDayId ? blocksCacheRef.current[latestDayId] ?? [] : []);
+  setReport(latestDayId ? reportCacheRef.current[latestDayId] ?? null : null);
+
+  setLoading(false);
+
+
 }, [insightsCache]);
+
 
 
   useFocusEffect(
@@ -93,39 +103,7 @@ export default function Insights() {
   );
 
   /** ---------------- CATEGORY MAP ---------------- */
-  const categoryMap = useMemo(() => {
-    return Object.fromEntries(
-      categories.map(cat => [
-        cat.id,
-        { label: cat.label, color: cat.color },
-      ])
-    );
-  }, [categories]);
 
-  /** ---------------- LOAD CLOSED DAYS ---------------- */
-  useEffect(() => {
-    if (!userId) return;
-
-    async function loadDays() {
-      const { data } = await supabase
-        .from("days")
-        .select("*")
-        .eq("user_id", userId)
-        .not("end_time", "is", null)
-        .order("start_time", { ascending: true });
-
-      if (!data?.length) {
-        setDays([]);
-        setLoading(false);
-        return;
-      }
-
-      setDays(data);
-      setSelectedIndex(data.length - 1);
-    }
-
-    loadDays();
-  }, [userId]);
 
   /** ---------------- PREFETCH RECENT DAYS ---------------- */
   useEffect(() => {
@@ -158,7 +136,10 @@ export default function Insights() {
       blocksCacheRef.current[dayId] =
         normalizeBlocks(blocks ?? []);
       reportCacheRef.current[dayId] = report;
+
+
     });
+    
   }, [days, selectedIndex]);
 
   /** ---------------- LOAD SELECTED DAY ---------------- */
@@ -166,6 +147,8 @@ export default function Insights() {
     if (!days[selectedIndex]) return;
 
     const dayId = days[selectedIndex].id;
+
+
 
     // ✅ Cache hit → instant
     if (blocksCacheRef.current[dayId]) {
@@ -204,7 +187,7 @@ export default function Insights() {
     }
 
     load();
-  }, [selectedIndex]);
+  }, [selectedIndex, days]);
 
   function formatWindow(window: {
   start: Date;
@@ -228,41 +211,79 @@ export default function Insights() {
 
   /** ---------------- DERIVED DATA ---------------- */
 
+console.log(blocks)
 
+const selectedDay = days[selectedIndex];
+
+const analyticsBlocks = useMemo(() => {
+  console.log(selectedDay)
+  if (!selectedDay) return [];
+
+  // 🚫 Do NOT compute analytics until day is finalized
+  if (!selectedDay.end_time && selectedDay.day_phase !== "locked") {
+    return [];
+  }
+
+  
+  const cutoff = new Date(selectedDay.end_time);
+
+
+  return blocks.filter(block => block.startTime < cutoff);
+}, [blocks, selectedDay]);
+
+console.log(analyticsBlocks)
+
+
+
+const hasBlocks = analyticsBlocks.length > 0;
 
 const classifiedBlocks = useMemo(
-  () => blocks.map(toClassifiedBlock),
-  [blocks]
+  () => (hasBlocks ? analyticsBlocks.map(toClassifiedBlock) : []),
+  [analyticsBlocks, hasBlocks]
 );
 
+
+
 const bestFocusWindow = useMemo(
-  () => findBestFocusWindow(classifiedBlocks),
-  [classifiedBlocks]
+  () => (hasBlocks ? findBestFocusWindow(classifiedBlocks) : null),
+  [classifiedBlocks, hasBlocks]
 );
 
 const dayScore = useMemo(
-  () => scoreDay(classifiedBlocks),
-  [classifiedBlocks]
+  () =>
+    hasBlocks
+      ? scoreDay(classifiedBlocks)
+      : { percent: 0, productive: 0, neutral: 0, unproductive: 0 },
+  [classifiedBlocks, hasBlocks]
 );
+
+
 
 const outcomeBreakdown = useMemo(
-  () => breakdownByOutcome(classifiedBlocks),
-  [classifiedBlocks]
+  () =>
+    hasBlocks
+      ? breakdownByOutcome(classifiedBlocks)
+      : { productive: 0, neutral: 0, unproductive: 0 },
+  [classifiedBlocks, hasBlocks]
+);
+
+const outcomeBarData = useMemo(
+  () => normalizeOutcomeBreakdown(outcomeBreakdown),
+  [outcomeBreakdown]
 );
 
 
-  const outcomeBarData =
-  normalizeOutcomeBreakdown(outcomeBreakdown);
-
 const categoryBreakdown = useMemo(
-  () => breakdownByCategory(blocks),
-  [blocks]
+  () => (hasBlocks ? breakdownByCategory(analyticsBlocks) : []),
+  [analyticsBlocks, hasBlocks]
 );
 
 const categoryBarData = useMemo(
   () => normalizeCategoryBreakdown(categoryBreakdown),
   [categoryBreakdown]
 );
+
+
 
 
   const [breakdownMode, setBreakdownMode] =
@@ -280,7 +301,7 @@ const topCategoryData = [...categoryBarData]
     : topCategoryData;
 
 
-    const selectedDay = days[selectedIndex];
+    
     const rangeText = selectedDay
   ? formatDateRange(
       new Date(selectedDay.start_time),
@@ -288,19 +309,22 @@ const topCategoryData = [...categoryBarData]
     )
   : "";
 
-  const blocksCompleted = blocks.filter(b => b.completed).length;
-  const blocksMissed = blocks.length - blocksCompleted;
+const blocksCompleted = classifiedBlocks.filter(b => b.wasLogged).length;
+const blocksMissed = analyticsBlocks.length - blocksCompleted;
+
   
 const worstWindow =
   findMostUnproductiveWindow(classifiedBlocks);
 
-  {useEffect(() => {
 
-}, [breakdownMode, categoryBarData, data])}
+
+
+
 
   /** ---------------- GUARDS ---------------- */
   if (loading) {
     return (
+
       <SafeAreaView style={styles.safe} >
       <ScrollView contentContainerStyle={styles.container}
              ref={scrollRef}
@@ -308,23 +332,21 @@ const worstWindow =
                 <InsightsSkeleton/>
              </ScrollView>
       </SafeAreaView>
+ 
     );
   }
 
   if (!days.length) {
     return (
-      <SafeAreaView style={styles.safe} >
-      <ScrollView contentContainerStyle={styles.container}
-             ref={scrollRef}
-             showsVerticalScrollIndicator={false}>
-                <InsightsSkeleton/>
-             </ScrollView>
-      </SafeAreaView>
+
+                <InsightsEmptyState/>
+
     );
   }
 
   /** ---------------- RENDER ---------------- */
   return (
+    
     <SafeAreaView style={styles.safe} >
       <ScrollView contentContainerStyle={styles.container}
              ref={scrollRef}
@@ -449,7 +471,7 @@ const worstWindow =
       </ScrollView>
    </SafeAreaView>
 
-    
+
   );
 }
 

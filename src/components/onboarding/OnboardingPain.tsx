@@ -1,20 +1,24 @@
-// OnboardingPainScreen.tsx
 import React, { useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
-  SafeAreaView,
+  Dimensions,
   ScrollView,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { colors } from "../../constants/colors"; // adjust path if needed
-import { useOnboarding } from "../../providers/OnboardingProvider";
+import { colors } from "../../constants/colors";
+
+
+const { width, height } = Dimensions.get("window");
 
 type Props = {
   onContinue: (choiceId: string) => void;
   onSkip?: () => void;
+  onBack?: () => void;
+  step?: number;
+  
 };
 
 const OPTIONS = [
@@ -50,10 +54,7 @@ const OPTIONS = [
   },
 ];
 
-export default function PainScreen({
-  onContinue,
-  onSkip,
-}: Props) {
+export default function PainScreen({ onContinue, onSkip, onBack, step = 1 }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const handleContinue = () => {
@@ -61,141 +62,146 @@ export default function PainScreen({
     onContinue(selectedId);
   };
 
-  const { goals, habits, categories } = useOnboarding();
-
-
-
   return (
     <LinearGradient
       colors={["#050816", colors.background ?? "#0B1224", "#111827"]}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
-      style={{ flex: 1 }}
+      style={styles.container}
     >
-      <SafeAreaView style={styles.safe}>
-        {/* Top bar */}
-        <View style={styles.topRow}>
-          <View style={{ width: 50 }} />
-          <View />
-          {onSkip && (
-            <Pressable onPress={onSkip} hitSlop={10}>
-              <Text style={styles.skipText}>Skip</Text>
-            </Pressable>
-          )}
-        </View>
+   
 
-        <ScrollView
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Title */}
-          <Text style={styles.title}>
-            What feels hardest about managing your time right now?
-          </Text>
-          <Text style={styles.subtitle}>
-            This helps 15 understand your pace and context.
-          </Text>
+      {/* Progress */}
+      <View style={styles.progressContainer}>
+        {Array.from({ length: 11 }).map((_, i) => (
+          <View
+            key={i}
+            style={[
+              styles.progressDot,
+              i + 1 <= step && styles.activeDot,
+            ]}
+          />
+        ))}
+      </View>
 
-          {/* Options */}
-          <View style={styles.optionsContainer}>
-            {OPTIONS.map(option => {
-              const selected = option.id === selectedId;
-              return (
-                <Pressable
-                  key={option.id}
-                  onPress={() => setSelectedId(option.id)}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* TITLE */}
+        <Text style={styles.headline}>
+          What feels hardest about managing your time right now?
+        </Text>
+
+        {/* OPTIONS */}
+        <View style={styles.optionsContainer}>
+          {OPTIONS.map(option => {
+            const selected = option.id === selectedId;
+            return (
+              <Pressable
+                key={option.id}
+                onPress={() => setSelectedId(option.id)}
+                style={[
+                  styles.optionCard,
+                  selected && styles.optionCardSelected,
+                ]}
+              >
+                <Text
                   style={[
-                    styles.optionCard,
-                    selected && styles.optionCardSelected,
+                    styles.optionTitle,
+                    selected && styles.optionTitleSelected,
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.optionTitle,
-                      selected && styles.optionTitleSelected,
-                    ]}
-                  >
-                    {option.title}
+                  {option.title}
+                </Text>
+
+                {selected && (
+                  <Text style={styles.optionDescription}>
+                    {option.description}
                   </Text>
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
 
-                  {selected && (
-                    <Text style={styles.optionDescription}>
-                      {option.description}
-                    </Text>
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
+        <Text style={styles.helperText}>
+          Your answer won't limit access to any features.
+        </Text>
+      </ScrollView>
 
-          <Text style={styles.helperText}>
-            Your answer won’t limit access to any features.
-          </Text>
-
-          {/* Continue button */}
-          <Pressable
-            onPress={handleContinue}
-            disabled={!selectedId}
-            style={[
-              styles.continueButton,
-              !selectedId && styles.continueButtonDisabled,
-            ]}
-          >
-            <Text style={styles.continueText}>Continue</Text>
-          </Pressable>
-        </ScrollView>
-      </SafeAreaView>
+      {/* Continue */}
+      <Pressable
+        onPress={handleContinue}
+        disabled={!selectedId}
+        style={[
+          styles.nextButton,
+          !selectedId && { opacity: 0.4 },
+        ]}
+      >
+        <Text style={styles.nextText}>Next</Text>
+      </Pressable>
     </LinearGradient>
   );
 }
 
+
 const styles = StyleSheet.create({
-  safe: {
+  container: {
     flex: 1,
-  },
-  topRow: {
-    flexDirection: "row",
+    paddingTop: 80,
+    paddingHorizontal: 20,
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 4,
   },
-  skipText: {
-    color: "#9CA3AF",
-    fontSize: 15,
-    fontWeight: "500",
+
+  /** Progress bar **/
+  progressContainer: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 20,
   },
+  progressDot: {
+    width: width * 0.07,
+    height: 4,
+    borderRadius: 4,
+    backgroundColor: "#2A2A2A",
+  },
+  activeDot: {
+    backgroundColor: "#FFF",
+  },
+
+  /** Content **/
   content: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 32,
-    paddingBottom: 32,
+    paddingTop: 10,
+    paddingBottom: 20,
   },
-  title: {
-    color: "#F9FAFB",
+
+  headline: {
+    textAlign: "center",
     fontSize: 24,
-    fontWeight: "600",
-    lineHeight: 30,
-    marginBottom: 10,
+    fontWeight: "700",
+    lineHeight: 32,
+    color: "#FFF",
+    marginBottom: 24,
+    paddingHorizontal: 12,
   },
-  subtitle: {
-    color: "#9CA3AF",
-    fontSize: 15,
-    lineHeight: 21,
-    marginBottom: 28,
-  },
+
   optionsContainer: {
     gap: 14,
     marginBottom: 24,
   },
+
   optionCard: {
     borderRadius: 24,
     paddingVertical: 16,
     paddingHorizontal: 18,
-    backgroundColor: "rgba(15,23,42,0.9)", // slate-ish
+    backgroundColor: "rgba(15,23,42,0.85)",
   },
   optionCardSelected: {
-    backgroundColor: "#F9FAFB",
+    backgroundColor: "#FFF",
   },
   optionTitle: {
     fontSize: 16,
@@ -211,25 +217,28 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: "#4B5563",
   },
+
   helperText: {
     color: "#9CA3AF",
     fontSize: 13,
     textAlign: "center",
     marginBottom: 16,
   },
-  continueButton: {
-    height: 54,
-    borderRadius: 999,
-    backgroundColor: "#F9FAFB",
-    alignItems: "center",
+
+  /** Continue button **/
+  nextButton: {
+    width: width * 0.88,
+    height: 56,
+    borderRadius: 100,
+    borderWidth: 1.5,
+    borderColor: "#FFF",
     justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 40,
   },
-  continueButtonDisabled: {
-    opacity: 0.4,
-  },
-  continueText: {
-    fontSize: 17,
+  nextText: {
+    color: "#FFF",
+    fontSize: 18,
     fontWeight: "600",
-    color: "#020617",
   },
 });

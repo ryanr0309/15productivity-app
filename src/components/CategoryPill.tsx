@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Category } from "../constants/categories";
 
@@ -20,6 +20,7 @@ const colors = {
 type Props = {
   category: Category;
   selected?: boolean;
+  isHabit: boolean;
   onPress?: () => void;
   onDelete?: (id: string) => void;
 };
@@ -27,6 +28,7 @@ type Props = {
 export default function CategoryPill({
   category,
   selected = false,
+  isHabit,
   onPress,
   onDelete,
 }: Props) {
@@ -39,6 +41,7 @@ export default function CategoryPill({
         selected && styles.pillSelected,
       ]}
     >
+      
       {/* Color dot */}
       <View
         style={[
@@ -55,22 +58,29 @@ export default function CategoryPill({
         ]}
       >
         {category.label}
+          
       </Text>
+      {isHabit && (
+    <View style={styles.habitBadge}>
+      <Text style={styles.habitBadgeText}>H</Text>
+    </View>
+  )}
 
       {/* Delete (subtle, secondary action) */}
-      {onDelete && (
-        <TouchableOpacity
-          onPress={() => onDelete(category.id)}
-          hitSlop={10}
-          style={styles.deleteButton}
-        >
-          <Ionicons
-            name="close"
-            size={14}
-            color={colors.danger}
-          />
-        </TouchableOpacity>
-      )}
+     {onDelete && (
+  <Pressable
+    onPress={() => onDelete(category.id)}
+    hitSlop={10}
+    style={styles.deleteButton}
+  >
+    <Ionicons
+      name="close"
+      size={14}
+      color={colors.danger}
+    />
+  </Pressable>
+)}
+
     </TouchableOpacity>
   );
 }
@@ -116,4 +126,20 @@ const styles = StyleSheet.create({
     marginLeft: 2,
     opacity: 0.7,
   },
+  habitBadge: {
+
+  height: 16,               // fixed height
+  minWidth: 16,
+  borderRadius: 8,
+  backgroundColor: "rgba(255,255,255,0.18)",
+  alignItems: "center",
+  justifyContent: "center", 
+},
+habitBadgeText: {
+    fontSize: 10,
+  fontWeight: "700",
+  color: "#FFFFFF",
+  lineHeight: 12,
+},
+
 });

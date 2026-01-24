@@ -1,41 +1,43 @@
-// app/(protected)/_layout.tsx
 import { Slot, Redirect } from "expo-router";
-import React from "react";
+import React, { useEffect } from "react";
 import { AppSplash } from "../../components/home/AppSplash";
 import { useAuth } from "../../hooks/useAuth";
 import { useBilling } from "../../providers/BillingProvider";
 import { useData } from "../../providers/DataProvider";
 
 export default function ProtectedLayout() {
-  const { userId, authReady } = useAuth();
-  const { loading: billingLoading, isActive } = useBilling();
+  const { userId, authReady, validateSessionOrSignOut } = useAuth();
+  const { loading: billingLoading, isSubscribed , presentPaywall} = useBilling();
   const { homeReady } = useData();
 
-  // 1️⃣ Wait for auth + billing to hydrate
-  if (!authReady || billingLoading) {
-    return <AppSplash />;
-  }
 
-  // 2️⃣ Auth required
+useEffect(() => {
+  if (!authReady) return;
+
+  validateSessionOrSignOut();
+}, [authReady]);
+
+  // Wait for auth + billing
+  if (!authReady || billingLoading) {
+  return <AppSplash />;
+}
+
+
+  // Not logged in
   if (!userId) {
     return <Redirect href="/(auth)/welcome" />;
   }
 
-  // 3️⃣ ⚠️ Important: "undefined" means still resolving RC entitlements
-  if (isActive === undefined) {
-    return <AppSplash />;
-  }
-
-  // 4️⃣ User has no entitlement → paywall
-  if (!isActive) {
+  // Not subscribed → PAYWALL ROUTE
+  if (!isSubscribed) {
+    presentPaywall();
     return <Redirect href="/paywall" />;
   }
 
-  // 5️⃣ Optional data preload
+  // Optional data hydration
   if (!homeReady) {
     return <AppSplash />;
   }
 
-  // 6️⃣ Fully authorized + hydrated
   return <Slot />;
 }

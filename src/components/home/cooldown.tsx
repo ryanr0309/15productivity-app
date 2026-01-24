@@ -53,8 +53,7 @@ export default function CooldownScreen({
   };
 
   return (
-    <LinearGradient
-      colors={["#0B132B", "#1C2541"]}
+    <View
       style={styles.container}
     >
       <Ionicons
@@ -84,7 +83,7 @@ export default function CooldownScreen({
       <Text style={styles.footer}>
         Consistency beats intensity.
       </Text>
-    </LinearGradient>
+    </View>
   );
 }
 

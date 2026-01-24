@@ -42,11 +42,11 @@ export default function ConfirmDeleteHabitModal({
         </View>
 
         <Text style={styles.message}>
-          Delete habit{" "}
+          Delete habit {" "}
           <Text style={styles.bold}>
-            “{habitName}”
+            “{habitName}”{" "}
           </Text>
-          ?
+          and associated category ?
         </Text>
 
         <Text style={styles.subtext}>

@@ -11,6 +11,7 @@ import * as Haptics from "expo-haptics";
 import { supabase } from "../../lib/supabase";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors } from "../../constants/colors";
+import HabitsPlacementLoadingScreen from "../habits/HabitLoading";
 
 /* ---------------- CONSTANTS ---------------- */
 
@@ -149,13 +150,13 @@ export default function HabitPlacementScreen({
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <Text style={{ color: "#A1A1AA" }}>
-          Loading your day…
-        </Text>
-      </View>
+    
+        <HabitsPlacementLoadingScreen />
+ 
     );
   }
+
+  
 
   /* ---------------- RENDER ---------------- */
 
@@ -225,39 +226,39 @@ export default function HabitPlacementScreen({
       </ScrollView>
 
       {/* HABIT BANK (ALWAYS VISIBLE) */}
-      <View style={styles.bank}>
-        <Text style={styles.bankTitle}>Habits</Text>
+<View style={styles.bank}>
+  <Text style={styles.bankTitle}>Habits</Text>
 
-        <View style={styles.habitRow}>
-          {habits.map(habit => {
-            const selected =
-              habit.id === selectedHabitId;
+  {habits.length === 0 ? (
+    <Text style={styles.emptyHabitsText}>
+      No habits yet — add some in the Lab tab.
+    </Text>
+  ) : (
+    <View style={styles.habitRow}>
+      {habits.map(habit => {
+        const selected = habit.id === selectedHabitId;
 
-            return (
-              <Pressable
-                key={habit.id}
-                onPress={() =>
-                  handleSelectHabit(habit.id)
-                }
-                style={[
-                  styles.habitPill,
-                  {
-                    backgroundColor: habit.color,
-                    opacity: selected ? 1 : 0.6,
-                    transform: [
-                      { scale: selected ? 1.05 : 1 },
-                    ],
-                  },
-                ]}
-              >
-                <Text style={styles.habitText}>
-                  {habit.name}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
+        return (
+          <Pressable
+            key={habit.id}
+            onPress={() => handleSelectHabit(habit.id)}
+            style={[
+              styles.habitPill,
+              {
+                backgroundColor: habit.color,
+                opacity: selected ? 1 : 0.6,
+                transform: [{ scale: selected ? 1.05 : 1 }],
+              },
+            ]}
+          >
+            <Text style={styles.habitText}>{habit.name}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  )}
+</View>
+
 
       {/* CONTINUE */}
       <Pressable
@@ -376,5 +377,12 @@ blockLabel: {
   color: "#FFFFFF",
   fontSize: 12,
 },
+emptyHabitsText: {
+  color: "#71717A",
+  fontSize: 13,
+  lineHeight: 18,
+  paddingVertical: 6,
+},
+
 
 });

@@ -31,6 +31,11 @@ export default function TimeBlockCard({
   onPress,
 }: Props) {
   const state = getBlockState(block);
+  const resolvedCategoryColor =
+  block.categoryColor ??
+  loggedCategory?.color ??
+  colors.background;
+
 
   const isCompleted = state === "completed";
   const isDisabled = state === "upcoming";
@@ -58,13 +63,14 @@ export default function TimeBlockCard({
         styles.card,
 
         /* BACKGROUND */
-        {
-          backgroundColor: isCompleted
-            ? block.categoryColor ?? colors.background
-            : hasPlannedHabit
-            ? `${plannedHabit!.color}22`
-            : colors.background,
-        },
+      {
+  backgroundColor: isCompleted
+    ? block.categoryColor ?? colors.background
+    : hasPlannedHabit
+    ? `${plannedHabit!.color}22`
+    : colors.background,
+},
+
 
         {
           borderColor: colors.border

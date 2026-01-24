@@ -6,56 +6,40 @@ import React, {
   useState,
   ReactNode,
 } from "react";
-import { Alert } from "react-native";
-import Purchases, {
-  CustomerInfo,
-  LOG_LEVEL,
-} from "react-native-purchases";
+import Purchases, { CustomerInfo, LOG_LEVEL } from "react-native-purchases";
 import RevenueCatUI, { PAYWALL_RESULT } from "react-native-purchases-ui";
 import Constants from "expo-constants";
 import { useAuth } from "../hooks/useAuth";
 
 const ENTITLEMENT_ID = "Fifteen Pro";
 
-
-
 type BillingContextType = {
   loading: boolean;
-  isPro: boolean;
-  isActive: boolean;
-  willRenew: boolean | null;
-  periodType: "TRIAL" | "NORMAL" | null;
-  expiration: string | null;
-  hasUsedTrial: boolean;
+  isSubscribed: boolean;
   presentPaywall: () => Promise<boolean>;
-  presentPaywallIfNeeded: () => Promise<boolean>;
   refreshCustomerInfo: () => Promise<void>;
 };
+
 const BillingContext = createContext<BillingContextType | null>(null);
 
 export function BillingProvider({ children }: { children: ReactNode }) {
   const { userId } = useAuth();
 
-  const [loading, setLoading] = useState(true);
+  const [initializing, setInitializing] = useState(true);
+  const [linking, setLinking] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
-
+  const [rcUserId, setRcUserId] = useState<string | null>(null);
 
   const apiKey =
     Constants.expoConfig?.extra?.EXPO_PUBLIC_REVENUECAT_API_KEY ?? "";
 
-  /* ============ INIT ============ */
+  /* ---------- INIT ---------- */
   useEffect(() => {
     let cancelled = false;
 
     async function init() {
       try {
-        if (!apiKey) {
-          console.warn("Missing RevenueCat API key");
-          setLoading(false);
-          return;
-        }
-
-        Purchases.setLogLevel(LOG_LEVEL.DEBUG);
+        Purchases.setLogLevel(LOG_LEVEL.INFO);
         await Purchases.configure({ apiKey });
 
         Purchases.addCustomerInfoUpdateListener(info => {
@@ -63,13 +47,11 @@ export function BillingProvider({ children }: { children: ReactNode }) {
         });
 
         const info = await Purchases.getCustomerInfo();
-        if (!cancelled) {
-          setCustomerInfo(info);
-          setLoading(false);
-        }
-      } catch (err) {
-        console.warn("RevenueCat init error", err);
-        setLoading(false);
+        if (!cancelled) setCustomerInfo(info);
+      } catch (e) {
+        console.warn("RevenueCat init error", e);
+      } finally {
+        if (!cancelled) setInitializing(false);
       }
     }
 
@@ -79,133 +61,84 @@ export function BillingProvider({ children }: { children: ReactNode }) {
     };
   }, [apiKey]);
 
-  /* ============ LINK USER ============ */
-useEffect(() => {
-  if (loading) return;
+  /* ---------- LINK USER ---------- */
+  useEffect(() => {
+    if (initializing) return;
+    if (userId && rcUserId === userId) return;
+    if (!userId && rcUserId === null) return;
 
-  async function link() {
-    if (!userId) {
-      await Purchases.logOut();
-      return;
+    let cancelled = false;
+
+    async function syncUser() {
+      try {
+        setLinking(true);
+
+        if (!userId) {
+          await Purchases.logOut();
+          const info = await Purchases.getCustomerInfo();
+          if (!cancelled) {
+            setCustomerInfo(info);
+            setRcUserId(null);
+          }
+        } else {
+          const { customerInfo } = await Purchases.logIn(userId);
+          if (!cancelled) {
+            setCustomerInfo(customerInfo);
+            setRcUserId(userId);
+          }
+        }
+      } catch (e) {
+        console.warn("RevenueCat link error", e);
+      } finally {
+        if (!cancelled) setLinking(false);
+      }
     }
 
-    console.log("🔗 RC linking to:", userId);
-    const info = await Purchases.logIn(userId);
-    await refreshCustomerInfo();
-  }
+    syncUser();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, initializing, rcUserId]);
 
-  link();
-}, [userId, loading]);
+  const loading = initializing || linking;
 
+  const isSubscribed =
+    !!customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];
 
-  /* ============ HELPERS ============ */
   const refreshCustomerInfo = useCallback(async () => {
     const info = await Purchases.getCustomerInfo();
     setCustomerInfo(info);
   }, []);
 
-  /* ============ ENTITLEMENT CHECK ============ */
-  const activeEnt = customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];
+  const presentPaywall = useCallback(async () => {
+    try {
+      const offerings = await Purchases.getOfferings();
+      const offering = offerings.current;
+      if (!offering) return false;
 
-  
+      const result = await RevenueCatUI.presentPaywall({ offering });
 
-const isActive = !!activeEnt?.isActive;
-const isPro = isActive; // OK
+      if (
+        result === PAYWALL_RESULT.PURCHASED ||
+        result === PAYWALL_RESULT.RESTORED
+      ) {
+        await refreshCustomerInfo();
+        return true;
+      }
 
-  const willRenew = activeEnt?.willRenew ?? null;
-  const periodType = (activeEnt?.periodType as "TRIAL" | "NORMAL") ?? null;
-  const expiration = activeEnt?.expirationDate ?? null;
-
-  // Detect past trial use (after trial or restore)
-  const hasUsedTrial =
-    periodType === "TRIAL" || !!customerInfo?.nonSubscriptionTransactions?.length;
-
-    useEffect(() => {
-  console.log("🟨 RC CUSTOMER INFO:", {
-    userId,
-    entitlements: customerInfo?.entitlements?.active,
-    activeEnt,
-    isActive,
-    willRenew,
-    periodType,
-    expiration,
-    hasUsedTrial,
-  });
-}, [
-  userId,
-  customerInfo,
-  activeEnt,
-  isActive,
-  willRenew,
-  periodType,
-  expiration,
-  hasUsedTrial,
-]);
-
-
-  /* ============ PAYWALL ============ */
-const presentPaywall = useCallback(async () => {
-  try {
-    const offerings = await Purchases.getOfferings();
-    const offering = offerings.current; // always correct
-
-
-    if (!offering) {
-      console.warn("Offering not found in RevenueCat");
+      return false;
+    } catch (e) {
+      console.warn("presentPaywall error", e);
       return false;
     }
-
-    const result: PAYWALL_RESULT = await RevenueCatUI.presentPaywall({
-      offering,
-    });
-
-    if (result === PAYWALL_RESULT.PURCHASED ||
-        result === PAYWALL_RESULT.RESTORED) {
-      await refreshCustomerInfo();
-      return true;
-    }
-
-    return false;
-  } catch (e) {
-    console.warn("presentPaywall error:", e);
-    return false;
-  }
-}, [refreshCustomerInfo]);
-
-
-
-const presentPaywallIfNeeded = useCallback(async () => {
-  if (isPro) return false;
-
-  const offerings = await Purchases.getOfferings();
-  const offering = offerings.all["ofrnga8061b1582"];
-
-  const result = await RevenueCatUI.presentPaywallIfNeeded({
-    offering,
-    requiredEntitlementIdentifier: ENTITLEMENT_ID,
-  });
-
-  if (result === PAYWALL_RESULT.PURCHASED ||
-      result === PAYWALL_RESULT.RESTORED) {
-    await refreshCustomerInfo();
-    return true;
-  }
-
-  return false;
-}, [isPro, refreshCustomerInfo]);
+  }, [refreshCustomerInfo]);
 
   return (
     <BillingContext.Provider
       value={{
         loading,
-        isPro,
-        isActive,
-        willRenew,
-        periodType,
-        expiration,
-        hasUsedTrial,
+        isSubscribed,
         presentPaywall,
-        presentPaywallIfNeeded,
         refreshCustomerInfo,
       }}
     >
@@ -216,6 +149,6 @@ const presentPaywallIfNeeded = useCallback(async () => {
 
 export function useBilling() {
   const ctx = useContext(BillingContext);
-  if (!ctx) throw new Error("useBilling must be inside BillingProvider");
+  if (!ctx) throw new Error("useBilling must be used inside BillingProvider");
   return ctx;
 }

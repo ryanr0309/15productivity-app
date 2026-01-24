@@ -15,6 +15,9 @@ import CategoryPill from "../../components/CategoryPill";
 import AddCategoryModal from "../categories/AddCategoryModal";
 import { Category } from "../../constants/categories";
 import { useData } from "../../providers/DataProvider";
+import ConfirmDeleteHabitModal from "../home/ConfirmDeleteHabitModal";
+import ConfirmDeleteCategoryModal from "../home/ConfirmDeleteCategoryModal";
+
 
 
 type Props = {
@@ -64,6 +67,11 @@ export default function TimeBlockModal({
     null
   );
   const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
+  const [confirmDeleteCategory, setConfirmDeleteCategory] =
+  useState<{ id: string; label: string; isHabit: boolean } | null>(null);
+
+  
+
 
   const safeInitialDescription = (initialDescription ?? "");
   const { habits, categories} = useData();
@@ -147,21 +155,33 @@ function handleDeleteCategoryLocal(categoryId: string) {
       <Text style={styles.sectionTitle}>Choose a Category</Text>
 
       <View style={styles.pillRow}>
-        {categories.map((category) => (
-          <CategoryPill
-  key={category.id}
-  category={category}
-  selected={category.id === selectedCategoryId}
-  onPress={() => canEdit && setSelectedCategoryId(category.id)}
-  onDelete={
-  !isLocked
-    ? () => handleDeleteCategoryLocal(category.id)
-    : undefined
-}
+        {categories.map(category => {
+  const isHabit = habits.some(
+    h => h.category_id === category.id
+  );
 
-/>
+  return (
+    <CategoryPill
+      key={category.id}
+      category={category}
+      selected={category.id === selectedCategoryId}
+      isHabit={isHabit}
+      onPress={() => canEdit && setSelectedCategoryId(category.id)}
+      onDelete={
+        !isLocked
+          ? () => {
+              setConfirmDeleteCategory({
+                id: category.id,
+                label: category.label,
+                isHabit,
+              });
+            }
+          : undefined
+      }
+    />
+  );
+})}
 
-        ))}
 
         <Pressable
   disabled={!canEdit}
@@ -244,13 +264,27 @@ function handleDeleteCategoryLocal(categoryId: string) {
     setIsAddCategoryOpen(false);
   }}
 />
+
+<ConfirmDeleteCategoryModal
+  visible={!!confirmDeleteCategory}
+  categoryName={confirmDeleteCategory?.label}
+  isHabit={confirmDeleteCategory?.isHabit ?? false}
+  onCancel={() => setConfirmDeleteCategory(null)}
+  onConfirm={() => {
+    if (!confirmDeleteCategory) return;
+
+    handleDeleteCategoryLocal(confirmDeleteCategory.id);
+    setConfirmDeleteCategory(null);
+  }}
+/>
+  
+
     </ScrollView>
   </KeyboardAvoidingView> 
   );
 }
+
 const styles = StyleSheet.create({
-
-
   handle: {
       width: 40,
   height: 4,

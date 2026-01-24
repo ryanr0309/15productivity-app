@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 
 const PRIVATE_KEY = fs.readFileSync("AuthKey_X5R77Y7JY2.p8");
 
-console.log(PRIVATE_KEY)
+
 
 const TEAM_ID = "YYW69L3H994";
 const CLIENT_ID = "com.ryan.fifteen.services";
@@ -24,4 +24,4 @@ const token = jwt.sign(
   }
 );
 
-console.log(token);
+

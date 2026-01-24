@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useRef, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -6,20 +6,26 @@ import {
   StyleSheet,
   TouchableOpacity,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 
 import { colors } from "../../../constants/colors";
-import { supabase } from "../../../lib/supabase";
 import EditGoalsModal from "../../../components/home/EditGoalsModal";
 import AddEditHabitModal from "../../../components/home/AddEditHabitModal";
 import ConfirmDeleteHabitModal from "../../../components/home/ConfirmDeleteHabitModal";
 
 import { useData } from "../../../providers/DataProvider";
-import { useCallback, useRef } from "react";
-import { useFocusEffect } from "@react-navigation/native";
-import LabSkeleton from "../../../components/coach/LabInsights";
+import LottieView from "lottie-react-native";
+
+/* ===================== HELPERS ===================== */
+
+function formatMinutes(minutes: number) {
+  if (minutes < 60) return `${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
 
 /* ===================== COMPONENT ===================== */
 
@@ -28,36 +34,63 @@ export default function Lab() {
   const [isHabitModalOpen, setIsHabitModalOpen] = useState(false);
   const [habitToDelete, setHabitToDelete] = useState<any | null>(null);
 
-
   const {
-  habits,
-  categories,
-  labCache,
-  addHabit,
-  addCategory,
-  deleteHabit,
-  updateLabGoals
-} = useData();
+    habits,
+    categories,
+    labCache,
+    insightsCache, // ✅ ADD
+    addHabit,
+    deleteHabit,
+    updateLabGoals,
+  } = useData();
 
-const goals = labCache?.goals ?? [];
-
-
+  const goals = labCache?.goals ?? [];
   const scrollRef = useRef<ScrollView>(null);
 
   useFocusEffect(
     useCallback(() => {
-      // wait 1 frame so the ScrollView is mounted + measured
       requestAnimationFrame(() => {
         scrollRef.current?.scrollTo({ y: 0, animated: false });
       });
-
-      // no cleanup needed
     }, [])
   );
 
+  /* ===================== HABIT STATS ===================== */
+
+  const habitStats = useMemo(() => {
+    if (!insightsCache) return {};
 
 
-  /* ===================== LOAD GOALS ===================== */
+    const stats: Record<
+      string,
+      { totalMinutes: number; daysWorked: number }
+    > = {};
+
+    habits.forEach(habit => {
+  
+      let totalMinutes = 0;
+      const days = new Set<string>();
+
+      Object.entries(insightsCache.blocksByDayId).forEach(
+        ([dayId, blocks]) => {
+          blocks.forEach(block => {
+      
+            if (block.categoryId === habit.category_id) {
+              totalMinutes += 15;
+              days.add(dayId);
+            }
+          });
+        }
+      );
+
+      stats[habit.id] = {
+        totalMinutes,
+        daysWorked: days.size,
+      };
+    });
+
+    return stats;
+  }, [habits, insightsCache]);
 
   /* ===================== RENDER ===================== */
 
@@ -111,47 +144,77 @@ const goals = labCache?.goals ?? [];
           </View>
 
           {habits.length === 0 ? (
-            <Text style={styles.emptyText}>No habits yet</Text>
-          ) : (
-            habits.map(habit => (
-              <View key={habit.id}>
-                <View
-                  style={[
-                    styles.habitCard,
-                    {
-                      backgroundColor: `${habit.color}22`,
-                      borderColor: `${habit.color}55`,
-                    },
-                  ]}
-                >
-                  {/* DELETE */}
-                  <TouchableOpacity
-                    style={styles.deleteX}
-                    onPress={() => setHabitToDelete(habit)}
-                    hitSlop={10}
+  <View style={styles.emptyState}>
+    <LottieView
+      source={require("../../../assets/animations/empty_ghost.json")}
+      autoPlay
+      loop
+      style={styles.lottie}
+    />
+
+    <Text style={styles.emptyTitle}>No habits yet</Text>
+    <Text style={styles.emptySubtitle}>
+      Add habits you want to build consistency around.
+    </Text>
+  </View>
+)  : (
+            habits.map(habit => {
+              const stats = habitStats[habit.id];
+              const hasWorked =
+                stats &&
+                (stats.totalMinutes > 0 || stats.daysWorked > 0);
+
+              return (
+                <View key={habit.id}>
+                  <View
+                    style={[
+                      styles.habitCard,
+                      {
+                        backgroundColor: `${habit.color}22`,
+                        borderColor: `${habit.color}55`,
+                      },
+                    ]}
                   >
-                    <Ionicons name="close" size={14} color="#FFFFFF" />
-                  </TouchableOpacity>
+                    {/* DELETE */}
+                    <TouchableOpacity
+                      style={styles.deleteX}
+                      onPress={() => setHabitToDelete(habit)}
+                      hitSlop={10}
+                    >
+                      <Ionicons name="close" size={24} color="#FFFFFF" />
+                    </TouchableOpacity>
 
-                  {/* PRIMARY */}
-                  <Text style={styles.habitName}>{habit.name}</Text>
+                    {/* PRIMARY */}
+                    <Text style={styles.habitName}>{habit.name}</Text>
 
- 
+                    {/* STATS / EMPTY */}
+                    {!hasWorked ? (
+                      <Text style={styles.habitSecondaryMuted}>
+                        You haven’t started working on this yet
+                      </Text>
+                    ) : (
+                      <View style={styles.habitStatsRow}>
+                        
+                        <Text style={styles.habitStat}>
+                          Progress: {formatMinutes(stats.totalMinutes)} ⏱️
+                        </Text>
+                        <Text style={styles.habitStatDivider}>•</Text>
+                        <Text style={styles.habitStat}>
+                          {stats.daysWorked}{" "}
+                          {stats.daysWorked === 1 ? "day" : "days"} ☀️
+                        </Text>
+                      </View>
+                    )}
 
-                   
-                    <Text style={styles.habitSecondaryMuted}>
-                      You haven’t started working on this yet
+                    {/* SINCE */}
+                    <Text style={styles.habitSince}>
+                      Since{" "}
+                      {new Date(habit.created_at).toLocaleDateString()}
                     </Text>
-                  
-
-                  {/* SINCE */}
-                  <Text style={styles.habitSince}>
-                    Since{" "}
-                    {new Date(habit.created_at).toLocaleDateString()}
-                  </Text>
+                  </View>
                 </View>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
 
@@ -162,9 +225,9 @@ const goals = labCache?.goals ?? [];
           goals={goals}
           onClose={() => setIsEditGoalsOpen(false)}
           onSaved={async updatedGoals => {
-    await updateLabGoals(updatedGoals);
-    setIsEditGoalsOpen(false);
-  }}
+            await updateLabGoals(updatedGoals);
+            setIsEditGoalsOpen(false);
+          }}
         />
 
         <AddEditHabitModal
@@ -174,7 +237,6 @@ const goals = labCache?.goals ?? [];
           categories={categories}
           onSave={async (name, color) => {
             await addHabit({ name, color });
-            await addCategory({ label: name, color });
             setIsHabitModalOpen(false);
           }}
         />
@@ -184,13 +246,10 @@ const goals = labCache?.goals ?? [];
           habitName={habitToDelete?.name ?? ""}
           onCancel={() => setHabitToDelete(null)}
           onConfirm={async () => {
-  if (!habitToDelete) return;
-
-  await deleteHabit(habitToDelete.id);
-
-  setHabitToDelete(null);
-}}
-
+            if (!habitToDelete) return;
+            await deleteHabit(habitToDelete.id);
+            setHabitToDelete(null);
+          }}
         />
       </ScrollView>
     </SafeAreaView>
@@ -204,50 +263,36 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-
   container: {
     paddingHorizontal: 16,
     paddingBottom: 28,
     gap: 12,
   },
-
-  loadingText: {
-    color: colors.textSecondary,
-    textAlign: "center",
-    marginTop: 40,
-    fontSize: 14,
-  },
-
   header: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     marginBottom: 20,
   },
-
   headerText: {
     color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "600",
   },
-
   section: {
     marginBottom: 32,
   },
-
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 12,
   },
-
   sectionTitle: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
   },
-
   goalsContainer: {
     backgroundColor: colors.card,
     borderRadius: 16,
@@ -255,14 +300,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     paddingVertical: 12,
   },
-
   goalRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
-
   goalDot: {
     width: 6,
     height: 6,
@@ -271,27 +314,23 @@ const styles = StyleSheet.create({
     marginTop: 7,
     marginRight: 12,
   },
-
   goalText: {
     color: colors.textPrimary,
     fontSize: 14,
     fontWeight: "700",
     lineHeight: 20,
   },
-
   goalEmptyText: {
     color: colors.textSecondary,
     fontSize: 13,
     fontWeight: "600",
   },
-
   emptyText: {
     color: colors.textSecondary,
     fontSize: 13,
     textAlign: "center",
     marginTop: 12,
   },
-
   habitCard: {
     borderRadius: 16,
     padding: 16,
@@ -299,21 +338,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     position: "relative",
   },
-
   habitName: {
     color: "#FFFFFF",
     fontSize: 15,
     fontWeight: "700",
     marginBottom: 4,
   },
-
-  habitSecondary: {
-    color: "rgba(255,255,255,0.85)",
-    fontSize: 13,
-    fontWeight: "600",
-    marginBottom: 2,
-  },
-
   habitSecondaryMuted: {
     color: "rgba(255,255,255,0.65)",
     fontSize: 13,
@@ -321,13 +351,25 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     marginBottom: 2,
   },
-
+  habitStatsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 2,
+  },
+  habitStat: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  habitStatDivider: {
+    marginHorizontal: 6,
+    color: "rgba(255,255,255,0.5)",
+  },
   habitSince: {
     color: "rgba(255,255,255,0.6)",
     fontSize: 11,
     fontWeight: "500",
   },
-
   deleteX: {
     position: "absolute",
     top: 8,
@@ -336,4 +378,45 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 4,
   },
+
+  title: {
+    color: colors.textPrimary,
+    fontSize: 14,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  subtitle: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+    maxWidth: 240,
+  },
+  emptyState: {
+  alignItems: "center",
+  justifyContent: "center",
+  paddingVertical: 32,
+},
+
+lottie: {
+  width: 240,
+  height: 240,
+  marginBottom: 12,
+},
+
+emptyTitle: {
+  color: "#FFFFFF",
+  fontSize: 14,
+  fontWeight: "800",
+  marginBottom: 4,
+},
+
+emptySubtitle: {
+  color: "rgba(255,255,255,0.7)",
+  fontSize: 12,
+  fontWeight: "600",
+  textAlign: "center",
+  maxWidth: 240,
+},
+
 });

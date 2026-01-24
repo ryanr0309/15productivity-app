@@ -8,18 +8,24 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
+  Dimensions,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { colors } from "../../constants/colors";
 import { useOnboarding } from "../../providers/OnboardingProvider";
 
+
+const { width, height } = Dimensions.get("window");
+
 type Props = {
-  onContinue: () => void;       // we no longer need to pass goals up
+  onContinue: () => void;
   onSkip?: () => void;
+  onBack?: () => void;
+  step?: number;
 };
 
-export default function OnboardingGoalsScreen({ onContinue, onSkip }: Props) {
+export default function OnboardingGoalsScreen({ onContinue, onSkip, onBack, step = 5 }: Props) {
   const { setGoals } = useOnboarding();
-
   const [fields, setFields] = useState<string[]>(["", "", ""]);
   const MAX = 5;
 
@@ -32,9 +38,7 @@ export default function OnboardingGoalsScreen({ onContinue, onSkip }: Props) {
   }
 
   function addGoal() {
-    if (fields.length < MAX) {
-      setFields(prev => [...prev, ""]);
-    }
+    if (fields.length < MAX) setFields(prev => [...prev, ""]);
   }
 
   function removeGoal(i: number) {
@@ -48,24 +52,43 @@ export default function OnboardingGoalsScreen({ onContinue, onSkip }: Props) {
 
   function handleContinue() {
     const cleaned = validGoals.map(g => g.trim());
-    setGoals(cleaned);     // ✅ write into context
-    onContinue();          // ✅ tell parent to go to next step (step(2))
+    setGoals(cleaned);
+    onContinue();
   }
 
   return (
-    <LinearGradient colors={["#0B1224", "#111B34"]} style={styles.container}>
+    <LinearGradient
+      colors={["#050816", colors.background ?? "#0B1224", "#111827"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={styles.container}
+    >
+      {/* Progress */}
+
+      <View style={styles.progressContainer}>
+        {Array.from({ length: 11 }).map((_, i) => (
+          <View
+            key={i}
+            style={[
+              styles.progressDot,
+              i + 1 <= step && styles.activeDot,
+            ]}
+          />
+        ))}
+      </View>
+
       <KeyboardAvoidingView
-        behavior={Platform.select({ ios: "padding", android: undefined })}
         style={{ flex: 1 }}
+        behavior={Platform.select({ ios: "padding", android: undefined })}
       >
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.header}>What are your goals right now?</Text>
-          <Text style={styles.sub}>
-            These help us personalize your experience and measure progress.
+          {/* Headline */}
+          <Text style={styles.headline}>
+            What are your goals right now?
           </Text>
 
           {fields.map((value, i) => (
@@ -104,54 +127,74 @@ export default function OnboardingGoalsScreen({ onContinue, onSkip }: Props) {
           )}
         </ScrollView>
 
+        {/* Continue */}
         <Pressable
           disabled={!canContinue}
           onPress={handleContinue}
-          style={[styles.button, !canContinue && styles.buttonDisabled]}
+          style={[
+            styles.nextButton,
+            !canContinue && { opacity: 0.4 },
+          ]}
         >
-          <Text style={styles.buttonText}>Continue</Text>
+          <Text style={styles.nextText}>Next</Text>
         </Pressable>
       </KeyboardAvoidingView>
     </LinearGradient>
   );
 }
 
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingTop: 80,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  scroll: {
-    paddingHorizontal: 24,
-    paddingTop: 44,
-    paddingBottom: 120,
+
+  /** Progress **/
+  progressContainer: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 20,
   },
-  header: {
-    color: "#FFFFFF",
-    fontSize: 28,
-    fontWeight: "600",
-    marginBottom: 12,
-    lineHeight: 34,
+  progressDot: {
+    width: width * 0.07,
+    height: 4,
+    borderRadius: 4,
+    backgroundColor: "#2A2A2A",
   },
-  sub: {
-    color: "#B8C5E4",
-    fontSize: 15,
-    marginBottom: 28,
-    lineHeight: 20,
+  activeDot: {
+    backgroundColor: "#FFF",
   },
+
+  content: {
+    flexGrow: 1,
+    paddingTop: 10,
+    paddingBottom: 30,
+  },
+
+  headline: {
+    textAlign: "center",
+    fontSize: 24,
+    fontWeight: "700",
+    lineHeight: 32,
+    color: "#FFF",
+    marginBottom: 24,
+    paddingHorizontal: 12,
+  },
+
   inputWrapper: {
     position: "relative",
     marginBottom: 14,
   },
   input: {
-    backgroundColor: "#151E36",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    backgroundColor: "rgba(15,23,42,0.85)",
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     color: "#FFFFFF",
     fontSize: 15,
-    borderWidth: 1,
-    borderColor: "#1F2A44",
   },
   removeButton: {
     position: "absolute",
@@ -163,6 +206,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#8EA2C8",
   },
+
   addButton: {
     marginTop: 12,
     marginBottom: 32,
@@ -172,29 +216,30 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
   },
-  button: {
-    height: 56,
-    marginHorizontal: 24,
-    marginBottom: 32,
-    borderRadius: 16,
-    backgroundColor: "#4DA3FF",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  buttonDisabled: {
-    opacity: 0.4,
-  },
-  buttonText: {
-    color: "#0B1224",
-    fontWeight: "700",
-    fontSize: 17,
-  },
+
   skip: {
     alignSelf: "center",
-    marginTop: 20,
+    marginTop: 10,
   },
   skipText: {
     color: "#8EA2C8",
     fontSize: 15,
+  },
+
+  /** Continue Button **/
+  nextButton: {
+    width: width * 0.88,
+    height: 56,
+    borderRadius: 100,
+    borderWidth: 1.5,
+    borderColor: "#FFF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 40,
+  },
+  nextText: {
+    color: "#FFF",
+    fontSize: 18,
+    fontWeight: "600",
   },
 });

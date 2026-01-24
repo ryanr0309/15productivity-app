@@ -95,8 +95,8 @@ async function saveTimeBlock({
     return;
   }
 
-  const nextDescription = (description ?? "").trim();
-  const prevDescription = (currentBlock.description ?? "").trim();
+  const nextDescription = description.trim();
+  const prevDescription = currentBlock.description.trim();
 
   const isEdit =
     currentBlock.categoryId !== categoryId ||
@@ -104,35 +104,29 @@ async function saveTimeBlock({
     currentBlock.categoryColor !== categoryColor ||
     prevDescription !== nextDescription;
 
-  if (!isEdit) {
+  if (!isEdit || currentBlock.edit_count >= 2) {
     pendingSaveRef.current.delete(blockId);
     return;
   }
 
-  if ((currentBlock.edit_count ?? 0) >= 2) {
-    console.warn("Block is locked");
-    pendingSaveRef.current.delete(blockId);
-    return;
-  }
+  const optimisticBlock: Block = {
+  ...currentBlock,
+  categoryId,
+  categoryLabel,
+  categoryColor,
+  description: nextDescription,
+  completed: Boolean(categoryId),
+  status: "logged" as const,
+  classification: "neutral" as const,
+  edit_count: currentBlock.edit_count + 1,
+};
 
-  // 🟢 Optimistic update
+  // 🟢 OPTIMISTIC UPDATE
   setBlocks(prev =>
-    prev.map(block =>
-      block.id === blockId
-        ? {
-            ...block,
-            categoryId,
-            categoryLabel,
-            categoryColor,
-            description: nextDescription,
-            completed: true,
-            edit_count: (block.edit_count ?? 0) + 1,
-          }
-        : block
-    )
+    prev.map(b => (b.id === blockId ? optimisticBlock : b))
   );
 
-  // 🟡 DB update
+  // 🟡 DB UPDATE
   const { error } = await supabase
     .from("time_blocks")
     .update({
@@ -141,18 +135,25 @@ async function saveTimeBlock({
       category_color: categoryColor,
       description: nextDescription,
       status: "logged",
-      edit_count: (currentBlock.edit_count ?? 0) + 1,
+      edit_count: optimisticBlock.edit_count,
     })
     .eq("id", blockId)
-    .lt("edit_count", 1);
+    .lt("edit_count", 2); // 👈 FIXED
 
   pendingSaveRef.current.delete(blockId);
 
   if (error) {
     console.error("Failed to save time block", error);
+
+    // 🔴 ROLLBACK
+    setBlocks(prev =>
+      prev.map(b => (b.id === blockId ? currentBlock : b))
+    );
+
     return;
   }
 
+  // 🔵 Async enrichment
   supabase.functions.invoke("classify-time-block", {
     body: { blockId },
   });
