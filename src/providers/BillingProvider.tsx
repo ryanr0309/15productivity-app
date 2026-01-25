@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
   ReactNode,
 } from "react";
@@ -15,7 +16,12 @@ const ENTITLEMENT_ID = "Fifteen Pro";
 
 type BillingContextType = {
   loading: boolean;
-  isSubscribed: boolean;
+
+  // 🔑 Billing states
+  isActive: boolean;
+  hasUsedTrial: boolean;
+
+  // Actions
   presentPaywall: () => Promise<boolean>;
   refreshCustomerInfo: () => Promise<void>;
 };
@@ -102,8 +108,20 @@ export function BillingProvider({ children }: { children: ReactNode }) {
 
   const loading = initializing || linking;
 
-  const isSubscribed =
-    !!customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];
+  /* ---------- DERIVED BILLING STATE ---------- */
+
+  const isActive = useMemo(() => {
+    return !!customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];
+  }, [customerInfo]);
+
+  const hasUsedTrial = useMemo(() => {
+    const entitlement = customerInfo?.entitlements?.all?.[ENTITLEMENT_ID];
+    if (!entitlement) return false;
+
+    return entitlement.periodType === "TRIAL";
+  }, [customerInfo]);
+
+  /* ---------- ACTIONS ---------- */
 
   const refreshCustomerInfo = useCallback(async () => {
     const info = await Purchases.getCustomerInfo();
@@ -137,7 +155,8 @@ export function BillingProvider({ children }: { children: ReactNode }) {
     <BillingContext.Provider
       value={{
         loading,
-        isSubscribed,
+        isActive,
+        hasUsedTrial,
         presentPaywall,
         refreshCustomerInfo,
       }}

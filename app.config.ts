@@ -12,7 +12,7 @@ export default {
 
     orientation: 'portrait',
     userInterfaceStyle: 'light',
-
+    icon: 'src/assets/images/fifteen.png',
     splash: {
       image: './assets/splash-icon.png',
       resizeMode: 'contain',

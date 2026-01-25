@@ -10,12 +10,16 @@ import {
 import DateTimePickerModal from "react-native-modal-datetime-picker";
 import * as Haptics from "expo-haptics";
 import LottieView from "lottie-react-native";
+import { useBilling } from "../../providers/BillingProvider";
+
+
 
 type Props = {
   onBeginDay: (estimatedSleep: Date) => Promise<void>;
 };
 
 export default function BeginDayScreen({ onBeginDay }: Props) {
+  const { isActive, presentPaywall } = useBilling();
   const [sleepTime, setSleepTime] = useState<Date | null>(null);
   const [pickerVisible, setPickerVisible] = useState(false);
 
@@ -42,6 +46,10 @@ export default function BeginDayScreen({ onBeginDay }: Props) {
   }
 
   async function handleBegin() {
+    if (!isActive) {
+    await presentPaywall();
+    return;
+  }
     if (!sleepTime) return;
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await onBeginDay(sleepTime);
