@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -9,16 +9,16 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors } from "../../constants/colors";
+import { Ionicons } from "@expo/vector-icons";
+import { useOnboarding } from "../../providers/OnboardingProvider";
 
-
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
 
 type Props = {
   onContinue: (choiceId: string) => void;
   onSkip?: () => void;
   onBack?: () => void;
   step?: number;
-  
 };
 
 const OPTIONS = [
@@ -54,12 +54,17 @@ const OPTIONS = [
   },
 ];
 
-export default function PainScreen({ onContinue, onSkip, onBack, step = 1 }: Props) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+export default function PainScreen({
+  onContinue,
+  onBack,
+  step = 1,
+}: Props) {
+  // 🔑 Persistent onboarding state
+  const { painPoint, setPainPoint } = useOnboarding();
 
   const handleContinue = () => {
-    if (!selectedId) return;
-    onContinue(selectedId);
+    if (!painPoint) return;
+    onContinue(painPoint);
   };
 
   return (
@@ -69,19 +74,36 @@ export default function PainScreen({ onContinue, onSkip, onBack, step = 1 }: Pro
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-   
+      {/* HEADER */}
+      <View style={styles.headerRow}>
+        {/* Back */}
+        <View style={styles.backSlot}>
+          {onBack && (
+            <Pressable
+              onPress={onBack}
+              hitSlop={12}
+              style={({ pressed }) => [
+                styles.backButton,
+                pressed && { opacity: 0.6 },
+              ]}
+            >
+              <Ionicons name="chevron-back" size={26} color="#FFF" />
+            </Pressable>
+          )}
+        </View>
 
-      {/* Progress */}
-      <View style={styles.progressContainer}>
-        {Array.from({ length: 11 }).map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.progressDot,
-              i + 1 <= step && styles.activeDot,
-            ]}
-          />
-        ))}
+        {/* Progress */}
+        <View style={styles.progressContainer}>
+          {Array.from({ length: 11 }).map((_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.progressDot,
+                i + 1 <= step && styles.activeDot,
+              ]}
+            />
+          ))}
+        </View>
       </View>
 
       <ScrollView
@@ -97,11 +119,12 @@ export default function PainScreen({ onContinue, onSkip, onBack, step = 1 }: Pro
         {/* OPTIONS */}
         <View style={styles.optionsContainer}>
           {OPTIONS.map(option => {
-            const selected = option.id === selectedId;
+            const selected = option.id === painPoint;
+
             return (
               <Pressable
                 key={option.id}
-                onPress={() => setSelectedId(option.id)}
+                onPress={() => setPainPoint(option.id)}
                 style={[
                   styles.optionCard,
                   selected && styles.optionCardSelected,
@@ -127,17 +150,17 @@ export default function PainScreen({ onContinue, onSkip, onBack, step = 1 }: Pro
         </View>
 
         <Text style={styles.helperText}>
-          Your answer won't limit access to any features.
+          Your answer won’t limit access to any features.
         </Text>
       </ScrollView>
 
       {/* Continue */}
       <Pressable
         onPress={handleContinue}
-        disabled={!selectedId}
+        disabled={!painPoint}
         style={[
           styles.nextButton,
-          !selectedId && { opacity: 0.4 },
+          !painPoint && { opacity: 0.4 },
         ]}
       >
         <Text style={styles.nextText}>Next</Text>
@@ -145,7 +168,6 @@ export default function PainScreen({ onContinue, onSkip, onBack, step = 1 }: Pro
     </LinearGradient>
   );
 }
-
 
 const styles = StyleSheet.create({
   container: {
@@ -156,23 +178,43 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
 
-  /** Progress bar **/
+  headerRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    marginBottom: 16,
+  },
+
+  backSlot: {
+    width: 44,
+    alignItems: "flex-start",
+  },
+
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   progressContainer: {
     flexDirection: "row",
     gap: 6,
-    marginBottom: 20,
   },
+
   progressDot: {
-    width: width * 0.07,
+    width: width * 0.055,
     height: 4,
     borderRadius: 4,
     backgroundColor: "#2A2A2A",
   },
+
   activeDot: {
     backgroundColor: "#FFF",
   },
 
-  /** Content **/
   content: {
     flexGrow: 1,
     paddingTop: 10,
@@ -200,17 +242,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     backgroundColor: "rgba(15,23,42,0.85)",
   },
+
   optionCardSelected: {
     backgroundColor: "#FFF",
   },
+
   optionTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: "#E5E7EB",
   },
+
   optionTitleSelected: {
     color: "#020617",
   },
+
   optionDescription: {
     marginTop: 6,
     fontSize: 14,
@@ -225,7 +271,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
 
-  /** Continue button **/
   nextButton: {
     width: width * 0.88,
     height: 56,
@@ -236,6 +281,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 40,
   },
+
   nextText: {
     color: "#FFF",
     fontSize: 18,

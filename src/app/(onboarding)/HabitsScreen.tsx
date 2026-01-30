@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -11,27 +11,22 @@ import { LinearGradient } from "expo-linear-gradient";
 import { colors } from "../../constants/colors";
 import { CATEGORY_COLORS } from "../../constants/categoryColors";
 import { useOnboarding } from "../../providers/OnboardingProvider";
-import AddCategoryModal from "../../components/categories/AddCategoryModal";
+import { Ionicons } from "@expo/vector-icons";
 
-
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
 
 const PRESET_HABITS = [
   "🏋️ Gym",
-  "📚 Reading",
-  "🧘 Meditation",
+  "📖 Reading",
   "🧠 Deep Work",
   "📝 Journaling",
-  "🧼 Cleaning",
-  "🍳 Cooking",
-  "🎧 Language Learning",
-  "🚶 Walking",
-  "🎨 Creative Practice",
-  "💻 Coding",
-  "🛏️ Sleep Hygiene",
-  "🥤 Hydration",
-  "🤝 Networking",
-  "📱 Digital Detox",
+  "📅 Planning / Day Review",
+  "🍳 Cooking at Home",
+  "🎧 Language Practice",
+  "🚶 Daily Walk",
+  "💻 Coding Practice",
+  "🤝 Professional Outreach",
+  "📵 Screen-Free Time",
 ];
 
 type Props = {
@@ -47,11 +42,13 @@ export default function OnboardingHabitScreen({
   onBack,
   step = 9,
 }: Props) {
-  const { setHabits } = useOnboarding();
+  const {
+    draftHabitIds,
+    setDraftHabitIds,
+    setHabits,
+  } = useOnboarding();
 
   const MAX = 5;
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [modalVisible, setModalVisible] = useState(false);
 
   const habits = PRESET_HABITS.map((label, i) => ({
     id: `habit-${i}`,
@@ -59,49 +56,65 @@ export default function OnboardingHabitScreen({
     color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
   }));
 
-  function toggle(id: string) {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else if (next.size < MAX) next.add(id);
-      return next;
+  function toggleHabit(id: string) {
+    setDraftHabitIds(prev => {
+      if (prev.includes(id)) {
+        return prev.filter(x => x !== id);
+      }
+      if (prev.length >= MAX) return prev;
+      return [...prev, id];
     });
   }
 
-  function stripEmoji(label: string) {
-    return label.replace(/^[^\w]+/g, "").trim();
-  }
-
-  const canContinue = selected.size >= 1;
+  const canContinue = draftHabitIds.length >= 1;
 
   function handleContinue() {
-    const chosen = habits.filter(h => selected.has(h.id));
-    const names = chosen.map(h => stripEmoji(h.label));
-    setHabits(names);
+    const chosen = habits.filter(h =>
+      draftHabitIds.includes(h.id)
+    );
+
+    // ✅ KEEP habits as string[]
+    setHabits(
+  chosen.map(h => ({
+    label: h.label,
+    color: h.color,
+  }))
+);
+
     onContinue();
   }
 
   return (
     <LinearGradient
       colors={["#050816", colors.background ?? "#0B1224", "#111827"]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      {/* PROGRESS */}
+      {/* HEADER */}
+      <View style={styles.headerRow}>
+        <View style={styles.backSlot}>
+          {onBack && (
+            <Pressable
+              onPress={onBack}
+              hitSlop={12}
+              style={styles.backButton}
+            >
+              <Ionicons name="chevron-back" size={26} color="#FFF" />
+            </Pressable>
+          )}
+        </View>
 
-  <View style={styles.progressContainer}>
-    {Array.from({ length: 11 }).map((_, i) => (
-      <View
-        key={i}
-        style={[
-          styles.progressDot,
-          i + 1 <= step && styles.activeDot,
-        ]}
-      />
-    ))}
-  </View>
-
+        <View style={styles.progressContainer}>
+          {Array.from({ length: 11 }).map((_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.progressDot,
+                i + 1 <= step && styles.activeDot,
+              ]}
+            />
+          ))}
+        </View>
+      </View>
 
       {/* CONTENT */}
       <ScrollView
@@ -119,12 +132,12 @@ export default function OnboardingHabitScreen({
 
         <View style={styles.chipContainer}>
           {habits.map(h => {
-            const active = selected.has(h.id);
+            const active = draftHabitIds.includes(h.id);
 
             return (
               <Pressable
                 key={h.id}
-                onPress={() => toggle(h.id)}
+                onPress={() => toggleHabit(h.id)}
                 style={[
                   styles.chip,
                   active && { backgroundColor: h.color },
@@ -133,7 +146,10 @@ export default function OnboardingHabitScreen({
                 <Text
                   style={[
                     styles.chipText,
-                    active && { color: "#0B1224", fontWeight: "700" },
+                    active && {
+                      color: "#0B1224",
+                      fontWeight: "700",
+                    },
                   ]}
                 >
                   {h.label}
@@ -141,11 +157,6 @@ export default function OnboardingHabitScreen({
               </Pressable>
             );
           })}
-
-          {/* Add habit chip */}
-          <Pressable style={styles.addChip} onPress={() => setModalVisible(true)}>
-            <Text style={styles.addChipText}>+ Add Habit</Text>
-          </Pressable>
         </View>
 
         <Text style={styles.infoText}>
@@ -156,28 +167,20 @@ export default function OnboardingHabitScreen({
       {/* NEXT */}
       <Pressable
         disabled={!canContinue}
-        style={[styles.nextButton, !canContinue && { opacity: 0.4 }]}
         onPress={handleContinue}
+        style={[
+          styles.nextButton,
+          !canContinue && { opacity: 0.4 },
+        ]}
       >
         <Text style={styles.nextText}>Next</Text>
       </Pressable>
 
       {onSkip && (
-        <Pressable onPress={onSkip} style={styles.skip}>
+        <Pressable onPress={onSkip}>
           <Text style={styles.skipText}>Skip</Text>
         </Pressable>
       )}
-
-      {/* Add Habit Modal */}
-      <AddCategoryModal
-        visible={modalVisible}
-        categories={[]}
-        habits={habits}
-        onCreate={({ label, color }) => {
-          // optional: custom habit support later
-        }}
-        onClose={() => setModalVisible(false)}
-      />
     </LinearGradient>
   );
 }
@@ -187,37 +190,45 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: 80,
     paddingHorizontal: 20,
-    alignItems: "center",
     justifyContent: "space-between",
   },
 
-  topRow: {
-  flexDirection: "row",
-  alignItems: "center",
-  gap: 10,                 // spacing between arrow & bar
-  marginBottom: 20,
-  width: "100%",
-},
+  headerRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
 
-  /** Progress **/
+  backSlot: {
+    width: 44,
+  },
+
+  backButton: {
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   progressContainer: {
     flexDirection: "row",
     gap: 6,
-    marginBottom: 20,
   },
+
   progressDot: {
-    width: width * 0.07,
+    width: width * 0.055,
     height: 4,
     borderRadius: 4,
     backgroundColor: "#2A2A2A",
   },
+
   activeDot: {
     backgroundColor: "#FFF",
   },
 
   content: {
     flexGrow: 1,
-    paddingTop: 10,
     paddingBottom: 30,
   },
 
@@ -225,7 +236,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 24,
     fontWeight: "700",
-    lineHeight: 32,
     color: "#FFF",
     marginBottom: 10,
   },
@@ -251,22 +261,9 @@ const styles = StyleSheet.create({
   },
 
   chipText: {
-    color: "#FFFFFF",
+    color: "#FFF",
     fontSize: 15,
     fontWeight: "600",
-  },
-
-  addChip: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 1.2,
-    borderColor: "#4DA3FF",
-  },
-  addChipText: {
-    color: "#4DA3FF",
-    fontWeight: "600",
-    fontSize: 15,
   },
 
   infoText: {
@@ -286,18 +283,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 40,
   },
+
   nextText: {
     color: "#FFF",
     fontSize: 18,
     fontWeight: "600",
   },
 
-  skip: {
-    alignSelf: "center",
-    marginBottom: 32,
-  },
   skipText: {
     color: "#8EA2C8",
-    fontSize: 15,
+    textAlign: "center",
+    marginBottom: 32,
   },
 });

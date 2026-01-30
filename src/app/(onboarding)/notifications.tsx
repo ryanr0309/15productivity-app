@@ -4,17 +4,21 @@ import * as Notifications from "expo-notifications";
 import { LinearGradient } from "expo-linear-gradient";
 import LottieView from "lottie-react-native";
 import { supabase } from "../../lib/supabase";
+import { Ionicons } from "@expo/vector-icons";
+import { colors } from "../../constants/colors";
 
 const { width } = Dimensions.get("window");
 
 type Props = {
   step: number;
   onDone: () => void; // parent advances ONLY after decision
+  onBack?: () => void;
 };
 
 export default function NotificationsOnboarding({
-  step,
+  step=11,
   onDone,
+  onBack
 }: Props) {
   async function handleEnable() {
     const { status, canAskAgain } =
@@ -54,24 +58,47 @@ export default function NotificationsOnboarding({
 
   return (
     <LinearGradient
-      colors={["#0F1426", "#070B17"]}
-      style={styles.container}
-    >
-      {/* Progress */}
-      <View style={styles.topBar}>
-        <View style={styles.progressContainer}>
-          {Array.from({ length: 11 }).map((_, i) => (
-            <View
-              key={i}
-              style={[
-                styles.progressDot,
-                i + 1 <= step && styles.activeDot,
-              ]}
-            />
-          ))}
-        </View>
-      </View>
+          colors={["#050816", colors.background ?? "#0B1224", "#111827"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.container}
+        >
 
+{/* BACK BUTTON */}
+{/* HEADER */}
+<View style={styles.headerRow}>
+  {/* Back */}
+  <View style={styles.backSlot}>
+  
+      <Pressable
+        onPress={onBack}
+        hitSlop={12}
+        style={({ pressed }) => [
+          styles.backButton,
+          pressed && { opacity: 0.6 },
+        ]}
+      >
+        <Ionicons name="chevron-back" size={26} color="#FFF" />
+      </Pressable>
+ 
+  </View>
+
+  {/* Progress */}
+  <View style={styles.progressContainer}>
+    {Array.from({ length: 11 }).map((_, i) => (
+      <View
+        key={i}
+        style={[
+          styles.progressDot,
+          i + 1 <= step && styles.activeDot,
+        ]}
+      />
+    ))}
+  </View>
+
+  {/* Right spacer (keeps progress centered) */}
+ 
+</View>
       {/* Content */}
       <View style={styles.content}>
         <LottieView
@@ -84,8 +111,7 @@ export default function NotificationsOnboarding({
         <Text style={styles.title}>Stay on track</Text>
 
         <Text style={styles.subtitle}>
-          Get gentle reminders to start your day, protect streaks, and reflect
-          with weekly insights — never spam.
+          Get two gentle reminders a day. One in the morning to start your day and once to remind you to close your day near sleep time.
         </Text>
 
         <Pressable style={styles.primaryButton} onPress={handleEnable}>
@@ -103,21 +129,16 @@ export default function NotificationsOnboarding({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 72,
+    paddingTop: 80,
     paddingHorizontal: 20,
     backgroundColor: "#070B17",
+    justifyContent: "space-between",
   },
 
-  /* Progress */
-  topBar: {
-    marginBottom: 12,
-  },
-  progressContainer: {
-    flexDirection: "row",
-    gap: 6,
-  },
+
+
   progressDot: {
-    width: width * 0.065,
+    width: width * 0.055,
     height: 4,
     borderRadius: 4,
     backgroundColor: "rgba(255,255,255,0.18)",
@@ -179,4 +200,36 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.55)",
     fontSize: 15,
   },
+  headerRow: {
+  width: "100%",
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "flex-start",
+  marginBottom: 16,
+},
+
+backSlot: {
+  width: 44,
+  alignItems: "flex-start",
+},
+
+backButton: {
+  width: 44,
+  height: 44,
+  borderRadius: 22,
+  justifyContent: "center",
+  alignItems: "center",
+},
+
+backArrow: {
+  fontSize: 28,
+  color: "#FFF",
+  fontWeight: "400",
+},
+
+progressContainer: {
+  flexDirection: "row",
+  gap: 6,
+},
+
 });

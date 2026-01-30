@@ -11,7 +11,7 @@ import { CATEGORY_COLORS } from "../../constants/categoryColors";
 import ColorPicker from "../ColorPicker";
 import { Category } from "../../constants/categories";
 import { Habit } from "../../constants/habits";
-
+import { colors } from "../../constants/colors";
 
 type Props = {
   visible: boolean;
@@ -21,7 +21,6 @@ type Props = {
   categories: Category[];
   habits: Habit[];
 };
-
 
 export default function AddHabitModal({
   visible,
@@ -39,18 +38,17 @@ export default function AddHabitModal({
     ...habits.map(h => h.color),
   ];
 
-useEffect(() => {
-  if (!visible) return;
+  useEffect(() => {
+    if (!visible) return;
 
-  setName("");
+    setName("");
 
-  const firstAvailable = CATEGORY_COLORS.find(
-    c => !usedColors.includes(c)
-  );
+    const firstAvailable = CATEGORY_COLORS.find(
+      c => !usedColors.includes(c)
+    );
 
-  setSelectedColor(firstAvailable ?? null);
-}, [visible]);
-
+    setSelectedColor(firstAvailable ?? null);
+  }, [visible]);
 
   async function handleSave() {
     if (!name.trim() || !selectedColor) return;
@@ -68,7 +66,7 @@ useEffect(() => {
             value={name}
             onChangeText={setName}
             placeholder="Habit name"
-            placeholderTextColor="#6B7280"
+            placeholderTextColor="#8B93B6"
             style={styles.input}
             autoFocus
           />
@@ -82,13 +80,14 @@ useEffect(() => {
           />
 
           <View style={styles.actions}>
-            <Pressable onPress={onClose}>
+            <Pressable onPress={onClose} hitSlop={10}>
               <Text style={styles.cancel}>Cancel</Text>
             </Pressable>
 
             <Pressable
               onPress={handleSave}
               disabled={!name.trim() || !selectedColor}
+              hitSlop={10}
             >
               <Text
                 style={[
@@ -107,19 +106,18 @@ useEffect(() => {
   );
 }
 
-
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.55)",
     alignItems: "center",
     justifyContent: "center",
   },
 
   card: {
     width: "90%",
-    backgroundColor: "#0F172A",
-    borderRadius: 16,
+    backgroundColor: colors.background,
+    borderRadius: 20,
     padding: 20,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
@@ -133,43 +131,28 @@ const styles = StyleSheet.create({
   },
 
   input: {
-    backgroundColor: "#020617",
+    backgroundColor: "#111827",
     color: "#FFFFFF",
-    borderRadius: 10,
-    padding: 12,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     marginBottom: 18,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.06)",
+    fontSize: 14,
   },
 
   label: {
-    color: "#94A3B8",
+    color: "#8B93B6",
     fontSize: 13,
     marginBottom: 8,
-  },
-
-  colorGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    marginBottom: 24,
-  },
-
-  colorDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-  },
-
-  selected: {
-    borderWidth: 3,
-    borderColor: "#FFFFFF",
   },
 
   actions: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginTop: 20,
   },
 
   cancel: {
@@ -178,7 +161,7 @@ const styles = StyleSheet.create({
   },
 
   save: {
-    color: "#38BDF8",
+    color: colors.accent ?? "#4DA3FF",
     fontSize: 15,
     fontWeight: "700",
   },

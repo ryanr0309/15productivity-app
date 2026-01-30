@@ -3,13 +3,19 @@ import { Pressable, Text, StyleSheet, View } from "react-native";
 import { Block, getBlockState, didCompletePlannedHabit } from "../../utils/timeBlocks";
 import { Category } from "../../constants/categories";
 import { Habit } from "../../constants/habits";
+import { Ionicons } from "@expo/vector-icons";
 
 type Props = {
   block: Block;
-  plannedHabit?: Habit;        // from time_blocks.habit_id
-  loggedCategory?: Category;   // from category_id when logged
+  plannedHabit?: Habit;
+  loggedCategory?: Category;
   onPress: () => void;
+
+  // ✅ ADD THESE
+  selectionMode?: boolean;
+  isSelected?: boolean;
 };
+
 
 const colors = {
   background: "#0B1224",
@@ -29,7 +35,11 @@ export default function TimeBlockCard({
   plannedHabit,
   loggedCategory,
   onPress,
+  selectionMode = false,
+  isSelected = false,
 }: Props) {
+  const isUnknown = block.status === "unknown";
+
   const state = getBlockState(block);
   const resolvedCategoryColor =
   block.categoryColor ??
@@ -37,15 +47,19 @@ export default function TimeBlockCard({
   colors.background;
 
 
-  const isCompleted = state === "completed";
+
   const isDisabled = state === "upcoming";
+const isCompleted = state === "completed" && !isUnknown;
+const hasPlannedHabit = !!plannedHabit && !isCompleted && !isUnknown;
 
-  const hasPlannedHabit = !!plannedHabit && !isCompleted;
+const plannedCompleted =
+  !isUnknown &&
+  block.completed &&
+  didCompletePlannedHabit(block);
 
-  const plannedCompleted =
-    block.completed && didCompletePlannedHabit(block);
+const showCompletedDot =
+  isCompleted && !plannedCompleted && !isUnknown;
 
-  const showCompletedDot = isCompleted && !plannedCompleted;
 
   const displayTime =
     typeof block.timeLabel === "string"
@@ -60,32 +74,63 @@ export default function TimeBlockCard({
       disabled={isDisabled}
       onPress={onPress}
       style={[
-        styles.card,
+  styles.card,
 
-        /* BACKGROUND */
-      {
-  backgroundColor: isCompleted
+  // BACKGROUND
+  {
+  backgroundColor: isUnknown
+    ? "rgba(255,255,255,0.045)"
+    : isCompleted
     ? block.categoryColor ?? colors.background
     : hasPlannedHabit
     ? `${plannedHabit!.color}22`
     : colors.background,
 },
+,
+
+  // BORDER
+ {
+  borderColor: isUnknown
+    ? "rgba(255,255,255,0.18)"
+    : isSelected
+    ? colors.accent
+    : colors.border,
+  borderWidth: isSelected ? 2 : 1,
+  borderStyle: isUnknown ? "dashed" : "solid",
+},
 
 
-        {
-          borderColor: colors.border
-        },
-        /* PLANNED ACCENT */
-        hasPlannedHabit && {
-          borderLeftWidth: 3,
-          borderLeftColor: plannedHabit!.color,
-        },
+  // PLANNED ACCENT
+  hasPlannedHabit && !isSelected && {
+    borderLeftWidth: 3,
+    borderLeftColor: plannedHabit!.color,
+  },
 
-        /* UPCOMING FADE */
-        { opacity: isDisabled ? 0.35 : 1 },
-      ]}
+  // UPCOMING FADE
+  { opacity: isDisabled ? 0.35 : 1 },
+]}
+
     >
       {/* ───────────────── INDICATORS (INDEPENDENT) ───────────────── */}
+
+{selectionMode && (
+  <View style={styles.selectionBadge}>
+    {isSelected && (
+      <Ionicons
+        name="checkmark"
+        size={12}
+        color="#FFFFFF"
+      />
+    )}
+  </View>
+)}
+
+{isUnknown && (
+  <View style={styles.unknownIndicator}>
+    <Text style={styles.unknownText}>⋯</Text>
+  </View>
+)}
+
 
       {/* GREEN DOT = block was logged */}
       {plannedCompleted ? (
@@ -134,8 +179,9 @@ export default function TimeBlockCard({
           {displayTime}
         </Text>
         <Text style={styles.blockSub}>
-                   {"Tap to log"}
-        </Text>
+  {isUnknown ? "Not remembered" : "Tap to log"}
+</Text>
+
         </View>
       )}
     </Pressable>
@@ -145,16 +191,14 @@ export default function TimeBlockCard({
 /* ───────────────── STYLES ───────────────── */
 
 const styles = StyleSheet.create({
-  card: {
-     width: "31%", // ~ (100 - gaps) / 3
+ card: {
   borderRadius: 14,
   borderWidth: 1,
   padding: 10,
   justifyContent: "space-between",
-  flex: 1,          // 👈 take column width
-  height: 72,       // 👈 keep height EXACT
-  marginHorizontal: 4
-  },
+  height: 72,           // 👈 keep this EXACT
+},
+
 
   primaryText: {
     color: colors.textPrimary,
@@ -221,4 +265,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
+  selectionBadge: {
+  position: "absolute",
+  top: 6,
+  left: 6,
+  width: 18,
+  height: 18,
+  borderRadius: 9,
+  backgroundColor: "rgba(0,0,0,0.55)",
+  alignItems: "center",
+  justifyContent: "center",
+  borderWidth: 1,
+  borderColor: "rgba(255,255,255,0.2)",
+},
+unknownIndicator: {
+  position: "absolute",
+  top: 6,
+  right: 6,
+  width: 14,
+  height: 14,
+  borderRadius: 7,
+  backgroundColor: "rgba(255,255,255,0.15)",
+  alignItems: "center",
+  justifyContent: "center",
+},
+
+unknownText: {
+  color: "rgba(255,255,255,0.7)",
+  fontSize: 10,
+  fontWeight: "700",
+},
+
 });

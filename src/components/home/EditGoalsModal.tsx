@@ -12,6 +12,7 @@ import {
 import Modal from "react-native-modal";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../../lib/supabase";
+import { colors } from "../../constants/colors";
 
 type Props = {
   visible: boolean;
@@ -171,54 +172,66 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     margin: 0,
   },
+
   container: {
-    backgroundColor: "#1E2A4A",
+    backgroundColor: colors.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.06)",
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 24,
   },
+
   handle: {
-    width: 40,
+    width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#6B7280",
+    backgroundColor: "rgba(255,255,255,0.18)",
     alignSelf: "center",
-    marginBottom: 12,
+    marginBottom: 10,
   },
+
   header: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     marginBottom: 16,
   },
+
   title: {
     color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "600",
   },
+
   goalRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
     marginBottom: 10,
   },
+
   index: {
     width: 18,
-    color: "#B0B8D4",
-    fontSize: 14,
+    color: "#8B93B6",
+    fontSize: 13,
     textAlign: "center",
   },
+
   input: {
     flex: 1,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "#111827",
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     color: "#FFFFFF",
     fontSize: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
   },
+
   addRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -226,26 +239,35 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 16,
   },
+
   addText: {
-    color: "#FFFFFF",
+    color: "#C7D2FE",
     fontSize: 14,
     fontWeight: "500",
   },
+
   primaryButton: {
     backgroundColor: "#4DA3FF",
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",
     marginTop: 8,
+    shadowColor: "#4DA3FF",
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 6,
   },
+
   primaryText: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
   },
+
   disabledButton: {
     opacity: 0.5,
   },
+
   sheetContainer: {
     paddingBottom: 12,
     maxHeight: "85%",

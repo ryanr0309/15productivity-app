@@ -39,13 +39,13 @@ export default function AnalyticsSummarySheet({
 }: Props) {
   const { insightsCache } = useData();
 
-  /** ---------------- DAY ---------------- */
+  /* ───────────── DAY ───────────── */
   const day = useMemo(
     () => insightsCache?.days?.find(d => d.id === dayId),
     [insightsCache, dayId]
   );
 
-  /** ---------------- BLOCKS (FINALIZED ONLY) ---------------- */
+  /* ───────────── BLOCKS ───────────── */
   const rawBlocks: Block[] =
     dayId && insightsCache?.blocksByDayId?.[dayId]
       ? insightsCache.blocksByDayId[dayId]
@@ -56,15 +56,15 @@ export default function AnalyticsSummarySheet({
     const cutoff = new Date(day.end_time);
 
     return rawBlocks.filter(
-      b => b.startTime && b.startTime < cutoff
+      b => b.startTime && b.startTime < cutoff && b.status !== "unknown"
     );
   }, [rawBlocks, day]);
 
-  /** ---------------- REPORT ---------------- */
+  /* ───────────── REPORT ───────────── */
   const report =
     (dayId && insightsCache?.reportsByDayId?.[dayId]) ?? null;
 
-  /** ---------------- CLASSIFICATION ---------------- */
+  /* ───────────── SCORING ───────────── */
   const classifiedBlocks = useMemo(
     () => blocks.map(toClassifiedBlock),
     [blocks]
@@ -75,10 +75,10 @@ export default function AnalyticsSummarySheet({
     [classifiedBlocks]
   );
 
-  const completedCount = classifiedBlocks.filter(b => b.wasLogged).length;
-  const missedCount = blocks.length - completedCount;
+  const completedCount = blocks.filter(b => b.status === "logged").length;
+  const missedCount = blocks.filter(b => b.status === "missed").length;
 
-  /** ---------------- BREAKDOWN MODE ---------------- */
+  /* ───────────── BREAKDOWN ───────────── */
   const [breakdownMode, setBreakdownMode] =
     useState<"category" | "outcome">("category");
 
@@ -96,19 +96,14 @@ export default function AnalyticsSummarySheet({
   );
 
   const breakdownData =
-    breakdownMode === "outcome"
-      ? outcomeData
-      : categoryData;
+    breakdownMode === "outcome" ? outcomeData : categoryData;
 
-  /** ---------------- WINDOWS ---------------- */
+  /* ───────────── WINDOWS ───────────── */
   const bestWindow = findBestFocusWindow(classifiedBlocks);
   const worstWindow = findMostUnproductiveWindow(classifiedBlocks);
 
-  function formatWindow(
-    window: { start: Date; end: Date } | null | undefined
-  ) {
+  const formatWindow = (window?: { start: Date; end: Date } | null) => {
     if (!window) return "N/A";
-
     return `${window.start.toLocaleTimeString([], {
       hour: "numeric",
       minute: "2-digit",
@@ -116,9 +111,9 @@ export default function AnalyticsSummarySheet({
       hour: "numeric",
       minute: "2-digit",
     })}`;
-  }
+  };
 
-  /** ---------------- RENDER ---------------- */
+  /* ───────────── RENDER ───────────── */
   return (
     <Modal
       isVisible={visible}
@@ -129,7 +124,6 @@ export default function AnalyticsSummarySheet({
       onSwipeComplete={onDismiss}
       onBackdropPress={onDismiss}
       propagateSwipe
-      avoidKeyboard
       style={styles.modal}
     >
       <View style={styles.sheet}>
@@ -154,80 +148,82 @@ export default function AnalyticsSummarySheet({
           </Pressable>
         </View>
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.content}
-        >
-          {/* SCORE */}
-          <View style={styles.cardStrong}>
-            <View style={styles.scoreCenter}>
-              <ProductivityCircle score={dayScore.percent} />
-              <Text style={styles.scoreMeta}>
-                {completedCount} completed · {missedCount} missed
-              </Text>
-            </View>
-          </View>
-
-          {/* TIME BREAKDOWN */}
-          <View style={styles.card}>
-            <Text style={styles.cardLabel}>Time breakdown</Text>
-
-            <TimeBreakdownBar
-              mode={breakdownMode}
-              data={breakdownData}
-              onChangeMode={setBreakdownMode}
-            />
-          </View>
-
-          {/* FOCUS WINDOWS */}
-          <View style={styles.row}>
-            <View style={styles.halfCard}>
-              <Text style={styles.cardLabel}>Best focus window</Text>
-              <Text style={styles.cardValue}>
-                {formatWindow(bestWindow)}
-              </Text>
-              <Text style={styles.cardSubtext}>
-                Highest density of productive blocks
-              </Text>
-            </View>
-
-            <View style={styles.halfCard}>
-              <Text style={styles.cardLabel}>Unproductive window</Text>
-              <Text style={styles.cardValue}>
-                {formatWindow(worstWindow)}
-              </Text>
-              <Text style={styles.cardSubtext}>
-                Cluster of low-focus time
-              </Text>
-            </View>
-          </View>
-
-          {/* AI SUMMARY */}
-          {report?.ai_summary && (
+        {/* SCROLL AREA */}
+        <View style={{ flex: 1 }}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentInsetAdjustmentBehavior="never"
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.content}
+          >
+            {/* SCORE */}
             <View style={styles.cardStrong}>
-              <Text style={styles.cardLabel}>AI reflection</Text>
-              <Text style={styles.aiText}>
-                {report.ai_summary}
-              </Text>
+              <View style={styles.scoreCenter}>
+                <ProductivityCircle score={dayScore.percent} />
+                <Text style={styles.scoreMeta}>
+                  {completedCount} completed · {missedCount} missed
+                </Text>
+              </View>
             </View>
-          )}
 
-          {/* TRY TOMORROW */}
-          {report?.try_tomorrow && (
-            <TryTomorrowCard items={report.try_tomorrow} />
-          )}
+            {/* BREAKDOWN */}
+            <View style={styles.card}>
+              <Text style={styles.cardLabel}>Time breakdown</Text>
+              <TimeBreakdownBar
+                mode={breakdownMode}
+                data={breakdownData}
+                onChangeMode={setBreakdownMode}
+              />
+            </View>
 
-          <Pressable style={styles.doneButton} onPress={onDismiss}>
-            <Text style={styles.doneText}>Continue</Text>
-          </Pressable>
-        </ScrollView>
+            {/* WINDOWS */}
+            <View style={styles.row}>
+              <View style={styles.halfCard}>
+                <Text style={styles.cardLabel}>Best focus window</Text>
+                <Text style={styles.cardValue}>
+                  {formatWindow(bestWindow)}
+                </Text>
+                <Text style={styles.cardSubtext}>
+                  Highest density of productive blocks
+                </Text>
+              </View>
+
+              <View style={styles.halfCard}>
+                <Text style={styles.cardLabel}>Unproductive window</Text>
+                <Text style={styles.cardValue}>
+                  {formatWindow(worstWindow)}
+                </Text>
+                <Text style={styles.cardSubtext}>
+                  Cluster of low-focus time
+                </Text>
+              </View>
+            </View>
+
+            {/* AI */}
+            {report?.ai_summary && (
+              <View style={styles.cardStrong}>
+                <Text style={styles.cardLabel}>AI reflection</Text>
+                <Text style={styles.aiText}>{report.ai_summary}</Text>
+              </View>
+            )}
+
+            {report?.try_tomorrow && (
+              <TryTomorrowCard items={report.try_tomorrow} />
+            )}
+
+            <Pressable style={styles.doneButton} onPress={onDismiss}>
+              <Text style={styles.doneText}>Continue</Text>
+            </Pressable>
+          </ScrollView>
+        </View>
       </View>
     </Modal>
   );
 }
 
-export const styles = StyleSheet.create({
-  /* ───────────── MODAL ───────────── */
+/* ───────────── STYLES ───────────── */
+
+const styles = StyleSheet.create({
   modal: {
     margin: 0,
     justifyContent: "flex-end",
@@ -237,8 +233,8 @@ export const styles = StyleSheet.create({
     backgroundColor: "#0F1426",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingBottom: 24,
     maxHeight: "92%",
+    flex: 1,
   },
 
   handle: {
@@ -250,7 +246,6 @@ export const styles = StyleSheet.create({
     marginVertical: 10,
   },
 
-  /* ───────────── HEADER ───────────── */
   header: {
     paddingHorizontal: 20,
     paddingBottom: 12,
@@ -280,24 +275,22 @@ export const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "800",
     color: colors.textPrimary,
-    letterSpacing: 0.2,
   },
 
   subtitle: {
-    marginTop: 2,
     fontSize: 12,
     fontWeight: "600",
     color: colors.textSecondary,
+    marginTop: 2,
   },
 
-  /* ───────────── CONTENT ───────────── */
   content: {
+    paddingTop: 12,          // ✅ THIS fixes the “not at top” feeling
     paddingHorizontal: 20,
     paddingBottom: 40,
     gap: 16,
   },
 
-  /* ───────────── CARDS ───────────── */
   card: {
     backgroundColor: colors.card,
     borderRadius: 16,
@@ -328,7 +321,6 @@ export const styles = StyleSheet.create({
     borderColor: colors.border,
   },
 
-  /* ───────────── TEXT ───────────── */
   cardLabel: {
     fontSize: 11,
     fontWeight: "700",
@@ -345,29 +337,30 @@ export const styles = StyleSheet.create({
   },
 
   cardSubtext: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.textSecondary,
     marginTop: 6,
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.textSecondary,
-  },
-
-  metaText: {
-    marginTop: 8,
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.textSecondary,
-    textAlign: "center",
   },
 
   aiText: {
-    marginTop: 8,
     fontSize: 14,
-    fontWeight: "500",
     lineHeight: 20,
     color: colors.textPrimary,
+    marginTop: 8,
   },
 
-  /* ───────────── CTA ───────────── */
+  scoreCenter: {
+    alignItems: "center",
+  },
+
+  scoreMeta: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.65)",
+  },
+
   doneButton: {
     marginTop: 12,
     backgroundColor: colors.accent,
@@ -381,17 +374,4 @@ export const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#0B1224",
   },
-
-  scoreCenter: {
-  alignItems: "center",
-  justifyContent: "center",
-},
-
-scoreMeta: {
-  marginTop: 8,
-  fontSize: 12,
-  fontWeight: "600",
-  color: "rgba(255,255,255,0.65)",
-},
-
 });

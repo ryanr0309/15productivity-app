@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -13,9 +13,10 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { colors } from "../../constants/colors";
 import { useOnboarding } from "../../providers/OnboardingProvider";
+import { Ionicons } from "@expo/vector-icons";
 
-
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
+const MAX = 5;
 
 type Props = {
   onContinue: () => void;
@@ -24,13 +25,16 @@ type Props = {
   step?: number;
 };
 
-export default function OnboardingGoalsScreen({ onContinue, onSkip, onBack, step = 5 }: Props) {
-  const { setGoals } = useOnboarding();
-  const [fields, setFields] = useState<string[]>(["", "", ""]);
-  const MAX = 5;
+export default function OnboardingGoalsScreen({
+  onContinue,
+  onSkip,
+  onBack,
+  step = 5,
+}: Props) {
+  const { draftGoals, setDraftGoals, setGoals } = useOnboarding();
 
   function updateField(i: number, text: string) {
-    setFields(prev => {
+    setDraftGoals(prev => {
       const next = [...prev];
       next[i] = text;
       return next;
@@ -38,43 +42,51 @@ export default function OnboardingGoalsScreen({ onContinue, onSkip, onBack, step
   }
 
   function addGoal() {
-    if (fields.length < MAX) setFields(prev => [...prev, ""]);
+    if (draftGoals.length < MAX) {
+      setDraftGoals(prev => [...prev, ""]);
+    }
   }
 
   function removeGoal(i: number) {
     if (i >= 3) {
-      setFields(prev => prev.filter((_, idx) => idx !== i));
+      setDraftGoals(prev => prev.filter((_, idx) => idx !== i));
     }
   }
 
-  const validGoals = fields.filter(f => f.trim().length > 0);
+  const validGoals = draftGoals.filter(g => g.trim().length > 0);
   const canContinue = validGoals.length >= 3;
 
   function handleContinue() {
-    const cleaned = validGoals.map(g => g.trim());
-    setGoals(cleaned);
+    setGoals(validGoals.map(g => g.trim()));
     onContinue();
   }
 
   return (
     <LinearGradient
       colors={["#050816", colors.background ?? "#0B1224", "#111827"]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      {/* Progress */}
+      {/* HEADER */}
+      <View style={styles.headerRow}>
+        <View style={styles.backSlot}>
+          {onBack && (
+            <Pressable onPress={onBack} hitSlop={12} style={styles.backButton}>
+              <Ionicons name="chevron-back" size={26} color="#FFF" />
+            </Pressable>
+          )}
+        </View>
 
-      <View style={styles.progressContainer}>
-        {Array.from({ length: 11 }).map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.progressDot,
-              i + 1 <= step && styles.activeDot,
-            ]}
-          />
-        ))}
+        <View style={styles.progressContainer}>
+          {Array.from({ length: 11 }).map((_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.progressDot,
+                i + 1 <= step && styles.activeDot,
+              ]}
+            />
+          ))}
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -86,12 +98,9 @@ export default function OnboardingGoalsScreen({ onContinue, onSkip, onBack, step
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Headline */}
-          <Text style={styles.headline}>
-            What are your goals right now?
-          </Text>
+          <Text style={styles.headline}>What are your goals right now?</Text>
 
-          {fields.map((value, i) => (
+          {draftGoals.map((value, i) => (
             <View key={i} style={styles.inputWrapper}>
               <TextInput
                 value={value}
@@ -114,20 +123,19 @@ export default function OnboardingGoalsScreen({ onContinue, onSkip, onBack, step
             </View>
           ))}
 
-          {fields.length < MAX && (
+          {draftGoals.length < MAX && (
             <Pressable onPress={addGoal} style={styles.addButton}>
               <Text style={styles.addButtonText}>+ Add another goal</Text>
             </Pressable>
           )}
 
           {onSkip && (
-            <Pressable onPress={onSkip} style={styles.skip}>
+            <Pressable onPress={onSkip}>
               <Text style={styles.skipText}>Skip</Text>
             </Pressable>
           )}
         </ScrollView>
 
-        {/* Continue */}
         <Pressable
           disabled={!canContinue}
           onPress={handleContinue}
@@ -148,29 +156,45 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: 80,
     paddingHorizontal: 20,
-    alignItems: "center",
     justifyContent: "space-between",
   },
 
-  /** Progress **/
+  headerRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+
+  backSlot: {
+    width: 44,
+  },
+
+  backButton: {
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   progressContainer: {
     flexDirection: "row",
     gap: 6,
-    marginBottom: 20,
   },
+
   progressDot: {
-    width: width * 0.07,
+    width: width * 0.055,
     height: 4,
     borderRadius: 4,
     backgroundColor: "#2A2A2A",
   },
+
   activeDot: {
     backgroundColor: "#FFF",
   },
 
   content: {
     flexGrow: 1,
-    paddingTop: 10,
     paddingBottom: 30,
   },
 
@@ -178,55 +202,50 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 24,
     fontWeight: "700",
-    lineHeight: 32,
     color: "#FFF",
     marginBottom: 24,
-    paddingHorizontal: 12,
   },
 
   inputWrapper: {
     position: "relative",
     marginBottom: 14,
   },
+
   input: {
     backgroundColor: "rgba(15,23,42,0.85)",
     borderRadius: 20,
     paddingHorizontal: 18,
     paddingVertical: 14,
-    color: "#FFFFFF",
-    fontSize: 15,
+    color: "#FFF",
   },
+
   removeButton: {
     position: "absolute",
     right: 12,
     top: 12,
-    padding: 4,
   },
+
   removeText: {
-    fontSize: 16,
     color: "#8EA2C8",
+    fontSize: 16,
   },
 
   addButton: {
     marginTop: 12,
     marginBottom: 32,
   },
+
   addButtonText: {
     color: "#4DA3FF",
     fontSize: 15,
     fontWeight: "600",
   },
 
-  skip: {
-    alignSelf: "center",
-    marginTop: 10,
-  },
   skipText: {
     color: "#8EA2C8",
-    fontSize: 15,
+    textAlign: "center",
   },
 
-  /** Continue Button **/
   nextButton: {
     width: width * 0.88,
     height: 56,
@@ -237,6 +256,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 40,
   },
+
   nextText: {
     color: "#FFF",
     fontSize: 18,

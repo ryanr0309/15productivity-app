@@ -11,6 +11,7 @@ import { ensureTimeBlocksExist, normalizeBlocks } from "../utils/blocks";
 import { Block } from "../utils/timeBlocks";
 import { Day } from "../types/days";
 import { useOpenDay } from "../services/useOpenDay";
+import { reconcileNotifications } from "../lib/reconcileNotifications";
 
 
 /* ===================== TYPES ===================== */
@@ -48,6 +49,8 @@ export type UserSettings = {
   interval_minutes: number;
   goals: string[] | null;
   updated_at: string;
+  notify_morning: boolean;
+  notify_night: boolean;
 };
 
 /* ===================== CONTEXT ===================== */
@@ -296,6 +299,15 @@ const invalidateInsights = useCallback(() => {
 
   /* ===================== MUTATIONS ===================== */
 
+  useEffect(() => {
+  if (!userSettings) return;
+
+  reconcileNotifications({
+    notifyMorning: userSettings.notify_morning ?? false,
+    notifyNight: userSettings.notify_night ?? false,
+  });
+}, [userSettings]);
+
   
   /**
    * Add a standalone category (not a habit)
@@ -330,43 +342,72 @@ const invalidateInsights = useCallback(() => {
   async ({ name, color }: { name: string; color: string }) => {
     if (!userId) return;
 
-    const { data, error } = await supabase
-      .from("habits")
-      .insert({ user_id: userId, name, color })
-      // ⚠️ This requires the FK habits.category_id -> categories.id to exist
-      .select("id,user_id,name,color,created_at,category_id,categories(*)")
-      .single<HabitInsertRow>();
+    const normalize = (s: string) => s.toLowerCase().trim();
+    const stripEmoji = (s: string) =>
+      s.replace(
+        /([\u2700-\u27BF]|[\uE000-\uF8FF]|[\uD83C-\uDBFF\uDC00-\uDFFF])/g,
+        ""
+      ).trim();
 
-    if (error || !data) {
+    const cleanName = stripEmoji(name);
+
+    /* ───── 1️⃣ Resolve or create category ───── */
+
+    // Try existing category first
+    const { data: existingCategory } = await supabase
+      .from("categories")
+      .select("*")
+      .eq("user_id", userId)
+      .ilike("label", cleanName)
+      .maybeSingle();
+
+    let category = existingCategory;
+
+    // Create if missing
+    if (!category) {
+      const { data: createdCategory, error: catErr } = await supabase
+        .from("categories")
+        .insert({
+          user_id: userId,
+          label: cleanName,
+          color,
+          origin: "habit", // ✅ REQUIRED
+        })
+        .select()
+        .single();
+
+      if (catErr || !createdCategory) {
+        console.error("Create category failed", catErr);
+        return;
+      }
+
+      category = createdCategory;
+      setCategories(prev => [...prev, category]);
+    }
+
+    /* ───── 2️⃣ Create habit with category_id ───── */
+
+    const { data: habit, error } = await supabase
+      .from("habits")
+      .insert({
+        user_id: userId,
+        name: cleanName,          // ❌ no emoji
+        color,                    // ✅ never null
+        category_id: category.id, // ✅ FIX
+      })
+      .select()
+      .single();
+
+    if (error || !habit) {
       console.error("Add habit failed", error);
       return;
     }
 
-    setHabits((prev) => [...prev, data]);
-
-    // 1) If the join came through, use it
-    const embeddedCategory = (data as any).categories as Category | undefined;
-
-    if (embeddedCategory) {
-      setCategories((prev) => [...prev, embeddedCategory]);
-      return;
-    }
-
-    // 2) Fallback: fetch category by category_id
-    if (data.category_id) {
-      const { data: cat, error: catErr } = await supabase
-        .from("categories")
-        .select("*")
-        .eq("id", data.category_id)
-        .single();
-
-      if (!catErr && cat) {
-        setCategories((prev) => [...prev, cat]);
-      }
-    }
+    setHabits(prev => [...prev, habit]);
   },
-  [userId]
+  [userId, setHabits, setCategories]
 );
+
 
 
 const deleteHabit = useCallback(

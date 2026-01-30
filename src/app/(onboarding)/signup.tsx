@@ -1,312 +1,295 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
   Pressable,
   ActivityIndicator,
   StyleSheet,
+  Image,
 } from "react-native";
+
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as WebBrowser from "expo-web-browser";
-import * as Google from "expo-auth-session/providers/google";
 import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "../../lib/supabase";
 import { useRouter } from "expo-router";
-import Constants from "expo-constants";
 import { useOnboarding } from "../../providers/OnboardingProvider";
 import { CATEGORY_COLORS } from "../../constants/categoryColors";
-import { useBilling } from "../../providers/BillingProvider";
+import { Ionicons } from "@expo/vector-icons";
+import { colors } from "../../constants/colors";
 
 WebBrowser.maybeCompleteAuthSession();
 
-export default function SignupAuthScreen() {
+type Props = {
+  onBack: () => void;
+  onSuccess: () => void;
+};
+
+export default function SignupAuthScreen({ onBack, onSuccess }: Props) {
   const router = useRouter();
   const { goals, categories, habits } = useOnboarding();
-  const { presentPaywall } = useBilling();
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const extra = Constants.expoConfig?.extra;
+  /* ───────────────── HELPERS ───────────────── */
 
-  const [_, googleResponse, promptGoogle] = Google.useAuthRequest({
-    iosClientId: extra?.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    webClientId: extra?.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-  });
+  const normalize = (s: string) => s.toLowerCase().trim();
 
-  /* ---------------- ATTACH ONBOARDING (UNCHANGED) ---------------- */
+  const stripEmoji = (s: string) =>
+    s.replace(
+      /([\u2700-\u27BF]|[\uE000-\uF8FF]|[\uD83C-\uDBFF\uDC00-\uDFFF])/g,
+      ""
+    ).trim();
 
-  
-  async function attachOnboarding(userId: string) {
-  // 🔒 fetch onboarding from DB-safe source
-  const onboarding = {
-    goals,
-    categories,
-    habits,
-  };
+  /* ───────────────── ATTACH ONBOARDING ───────────────── */
 
-  if (
-    onboarding.goals.length === 0 &&
-    onboarding.categories.length === 0 &&
-    onboarding.habits.length === 0
-  ) {
-    console.warn("attachOnboarding called with empty state");
+ async function attachOnboarding(userId: string) {
+  if (habits.length === 0) {
+    console.warn("No habits selected — skipping onboarding attach");
     return;
   }
 
-    try {
-      await supabase.from("user_settings").upsert({
-        user_id: userId,
-        goals: goals ?? [],
-        updated_at: new Date().toISOString(),
-      });
+  const normalize = (s: string) => s.toLowerCase().trim();
 
-      const normalize = (s: string) => s.toLowerCase().trim();
+  const stripEmoji = (s: string) =>
+    s.replace(
+      /([\u2700-\u27BF]|[\uE000-\uF8FF]|[\uD83C-\uDBFF\uDC00-\uDFFF])/g,
+      ""
+    ).trim();
 
-      const { data: existingCategories } = await supabase
-        .from("categories")
-        .select("*")
-        .eq("user_id", userId);
-
-      const final = existingCategories ?? [];
-      const usedColors = new Set(final.map((c) => c.color));
-
-      function nextColor() {
-        for (const c of CATEGORY_COLORS) {
-          if (!usedColors.has(c)) {
-            usedColors.add(c);
-            return c;
-          }
-        }
-        return CATEGORY_COLORS[0];
-      }
-
-      const normalizedExisting = new Set(final.map((c) => normalize(c.label)));
-      const categoriesToInsert: any[] = [];
-
-      for (const cat of categories) {
-        const norm = normalize(cat);
-        if (!normalizedExisting.has(norm)) {
-          categoriesToInsert.push({
-            user_id: userId,
-            label: cat,
-            color: nextColor(),
-          });
-          normalizedExisting.add(norm);
-        }
-      }
-
-      if (categoriesToInsert.length > 0) {
-        const { data } = await supabase
-          .from("categories")
-          .insert(categoriesToInsert)
-          .select("*");
-        final.push(...(data ?? []));
-      }
-
-      const habitsToInsert: any[] = [];
-
-      for (const h of habits) {
-        const match = final.find(
-          (c) => normalize(c.label) === normalize(h)
-        );
-
-        if (match) {
-          habitsToInsert.push({
-            user_id: userId,
-            name: h,
-            color: match.color,
-          });
-        } else {
-          const color = nextColor();
-          await supabase.from("categories").insert({
-            user_id: userId,
-            label: h,
-            color,
-          });
-
-          habitsToInsert.push({
-            user_id: userId,
-            name: h,
-            color,
-          });
-        }
-      }
-
-      if (habitsToInsert.length > 0) {
-        await supabase.from("habits").insert(habitsToInsert);
-      }
-
-      await supabase.auth.updateUser({
-        data: { onboarding_completed: true },
-      });
-
-      await supabase
-  .from("users")
-  .update({ onboarding_completed: true })
-  .eq("id", userId);
-
-
-    } catch {}
-  }
-
-  async function handlePostAuth(userId: string) {
-  // Always ensure users row exists
-  const { data: userRow } = await supabase
-    .from("users")
-    .select("onboarding_completed")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (!userRow) {
-    // first-ever signup → create row
-    await supabase.from("users").insert({
-      id: userId,
-      onboarding_completed: false,
-    });
-  }
-
-  // 🚨 onboarding data MUST exist here
-  if (
-    goals.length === 0 &&
-    categories.length === 0 &&
-    habits.length === 0
-  ) {
-    router.replace("/(onboarding)");
-    return;
-  }
-
-  // Attach onboarding ONCE
-  if (!userRow || userRow.onboarding_completed !== true) {
-    await attachOnboarding(userId);
-  }
-
-  router.replace("/(protected)");
-}
-
-
-  /* ---------------- APPLE SIGN IN ---------------- */
-
-  async function handleApple() {
   try {
-    setLoading(true);
-    setErrorMsg("");
-
-    const credential = await AppleAuthentication.signInAsync({
-      requestedScopes: [
-        AppleAuthentication.AppleAuthenticationScope.EMAIL,
-        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-      ],
+    /* ---------- USER SETTINGS ---------- */
+    await supabase.from("user_settings").upsert({
+      user_id: userId,
+      goals,
+      updated_at: new Date().toISOString(),
     });
 
-    if (!credential.identityToken) {
-      throw new Error("Missing identity token");
+    /* ---------- EXISTING CATEGORIES ---------- */
+    const { data: existingCategories, error: fetchErr } = await supabase
+      .from("categories")
+      .select("*")
+      .eq("user_id", userId);
+
+    if (fetchErr) throw fetchErr;
+
+    const categoryMap = new Map<string, any>();
+    const usedColors = new Set<string>();
+
+    (existingCategories ?? []).forEach(c => {
+      categoryMap.set(normalize(c.label), c);
+      if (c.color) usedColors.add(c.color);
+    });
+
+    const nextColor = () => {
+      for (const c of CATEGORY_COLORS) {
+        if (!usedColors.has(c)) {
+          usedColors.add(c);
+          return c;
+        }
+      }
+      return CATEGORY_COLORS[0];
+    };
+
+    /* ---------- NORMALIZE HABITS (SAFE) ---------- */
+    const normalizedHabits = habits.map(h => {
+      if (typeof h === "string") {
+        return {
+          label: stripEmoji(h),
+          color: nextColor(),
+        };
+      }
+      return {
+        label: stripEmoji(h.label),
+        color: h.color ?? nextColor(),
+      };
+    });
+
+    /* ---------- EXPLICIT CATEGORIES ---------- */
+    const explicitCategoryRows = categories
+      .map(stripEmoji)
+      .filter(label => !categoryMap.has(normalize(label)))
+      .map(label => ({
+        user_id: userId,
+        label,
+        color: nextColor(),
+        origin: "manual",
+      }));
+
+    /* ---------- HABIT-DERIVED CATEGORIES ---------- */
+    const habitCategoryRows = normalizedHabits
+      .filter(h => !categoryMap.has(normalize(h.label)))
+      .map(h => ({
+        user_id: userId,
+        label: h.label,
+        color: h.color,
+        origin: "habit",
+      }));
+
+    const categoryRows = [
+      ...explicitCategoryRows,
+      ...habitCategoryRows,
+    ];
+
+    if (categoryRows.length > 0) {
+      const { data: inserted, error: catErr } = await supabase
+        .from("categories")
+        .insert(categoryRows)
+        .select("*");
+
+      if (catErr) throw catErr;
+
+      inserted?.forEach(c => {
+        categoryMap.set(normalize(c.label), c);
+      });
     }
 
-    const { data, error } = await supabase.auth.signInWithIdToken({
-      provider: "apple",
-      token: credential.identityToken,
+    /* ---------- HABITS ---------- */
+    const habitRows = normalizedHabits.map(h => {
+      const category = categoryMap.get(normalize(h.label));
+      if (!category) {
+        throw new Error(`Missing category for habit "${h.label}"`);
+      }
+
+      return {
+        user_id: userId,
+        name: h.label,
+        category_id: category.id,
+        color: category.color,
+      };
     });
 
-    if (error) throw error;
+    const { error: habitErr } = await supabase
+      .from("habits")
+      .insert(habitRows);
 
-    await handlePostAuth(data.user.id);
-  } catch (err: any) {
-    setErrorMsg(err?.message || "Apple sign-in failed");
-  } finally {
-    setLoading(false);
+    if (habitErr) throw habitErr;
+
+    /* ---------- MARK COMPLETE ---------- */
+    await supabase.auth.updateUser({
+      data: { onboarding_completed: true },
+    });
+
+    await supabase
+      .from("users")
+      .update({ onboarding_completed: true })
+      .eq("id", userId);
+
+  } catch (err) {
+    console.error("attachOnboarding FAILED", err);
+    throw err;
   }
 }
 
 
-  /* ---------------- GOOGLE SIGN IN ---------------- */
+  /* ───────────────── AUTH FLOW ───────────────── */
 
-  async function handleGoogle() {
+  async function handlePostAuth(userId: string) {
+    const { data: userRow } = await supabase
+      .from("users")
+      .select("onboarding_completed")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (!userRow) {
+      await supabase.from("users").insert({
+        id: userId,
+        onboarding_completed: false,
+      });
+    }
+
+    if (
+      goals.length === 0 &&
+      categories.length === 0 &&
+      habits.length === 0
+    ) {
+      router.replace("/(onboarding)");
+      return;
+    }
+
+    if (!userRow || userRow.onboarding_completed !== true) {
+      await attachOnboarding(userId);
+    }
+
+    onSuccess();
+  }
+
+  async function handleApple() {
     try {
       setLoading(true);
       setErrorMsg("");
-      await promptGoogle();
-    } catch {
-      setErrorMsg("Google sign-in failed");
+
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        ],
+      });
+
+      if (!credential.identityToken) {
+        throw new Error("Missing identity token");
+      }
+
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: "apple",
+        token: credential.identityToken,
+      });
+
+      if (error) throw error;
+
+      await handlePostAuth(data.user.id);
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Apple sign-in failed");
+    } finally {
       setLoading(false);
     }
   }
 
-useEffect(() => {
-  (async () => {
-    if (googleResponse?.type === "success") {
-      const idToken = googleResponse.authentication?.idToken;
-      if (!idToken) return;
-
-      const { data, error } = await supabase.auth.signInWithIdToken({
-        provider: "google",
-        token: idToken,
-      });
-
-      if (error) {
-        setErrorMsg(error.message);
-        return;
-      }
-
-      await handlePostAuth(data.user.id);
-    }
-  })();
-}, [googleResponse]);
-
-
-  /* ---------------- UI ---------------- */
+  /* ───────────────── UI ───────────────── */
 
   return (
     <LinearGradient
-      colors={["#0F1426", "#070B17"]}
+      colors={["#050816", colors.background, "#111827"]}
       style={styles.container}
     >
+      <View style={styles.headerRow}>
+        <Pressable onPress={onBack} style={styles.backButton}>
+          <Ionicons name="chevron-back" size={26} color="#FFF" />
+        </Pressable>
+      </View>
+
       <View style={styles.content}>
+        <Image
+          source={require("../../assets/images/fifteen.png")}
+          style={styles.logo}
+        />
+
         <Text style={styles.title}>Create your account</Text>
         <Text style={styles.sub}>
           Save your goals, habits, and progress across devices.
         </Text>
 
-        {loading && (
-          <ActivityIndicator
-            color="#FFFFFF"
-            style={{ marginVertical: 20 }}
-          />
-        )}
+        {loading && <ActivityIndicator color="#FFF" />}
 
-        <View style={styles.buttonStack}>
-          <Pressable
-            style={[styles.authButton, styles.apple]}
-            onPress={handleApple}
-            disabled={loading}
-          >
-            <Text style={styles.appleText}>Continue with Apple</Text>
-          </Pressable>
-
-          <Pressable
-            style={[styles.authButton, styles.google]}
-            onPress={handleGoogle}
-            disabled={loading}
-          >
-            <Text style={styles.googleText}>Continue with Google</Text>
-          </Pressable>
-        </View>
+        <Pressable
+          style={styles.appleButton}
+          onPress={handleApple}
+          disabled={loading}
+        >
+          <Ionicons name="logo-apple" size={20} color="#000" />
+          <Text style={styles.appleText}>Continue with Apple</Text>
+        </Pressable>
 
         {errorMsg !== "" && (
           <Text style={styles.error}>{errorMsg}</Text>
         )}
-
-        <Pressable onPress={() => router.push("/login")}>
-          <Text style={styles.existing}>
-            Already have an account? Sign in
-          </Text>
-        </Pressable>
       </View>
     </LinearGradient>
   );
 }
 
-/* ---------------- STYLES ---------------- */
+/* ───────────────── STYLES ───────────────── */
 
 const styles = StyleSheet.create({
   container: {
@@ -314,74 +297,54 @@ const styles = StyleSheet.create({
     paddingTop: 80,
     paddingHorizontal: 24,
   },
-
+  headerRow: {
+    marginBottom: 16,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   content: {
     flex: 1,
     justifyContent: "center",
+    alignItems: "center",
   },
-
+  logo: {
+    width: 96,
+    height: 96,
+    borderRadius: 24,
+    marginBottom: 28,
+  },
   title: {
     fontSize: 28,
     fontWeight: "700",
-    color: "#FFFFFF",
-    textAlign: "center",
+    color: "#FFF",
     marginBottom: 10,
-    letterSpacing: -0.3,
   },
-
   sub: {
     fontSize: 15,
     color: "rgba(255,255,255,0.7)",
     textAlign: "center",
     marginBottom: 40,
-    lineHeight: 22,
   },
-
-  buttonStack: {
-    gap: 14,
-    marginBottom: 24,
-  },
-
-  authButton: {
-    height: 56,
-    borderRadius: 28,
-    justifyContent: "center",
+  appleButton: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FFF",
+    borderRadius: 28,
+    height: 56,
+    paddingHorizontal: 20,
   },
-
-  apple: {
-    backgroundColor: "#FFFFFF",
-  },
-
-  google: {
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.15)",
-  },
-
   appleText: {
     fontSize: 17,
     fontWeight: "600",
-    color: "#000000",
+    color: "#000",
   },
-
-  googleText: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
-
-  existing: {
-    color: "rgba(255,255,255,0.6)",
-    fontSize: 15,
-    textAlign: "center",
-    marginTop: 20,
-  },
-
   error: {
+    marginTop: 14,
     color: "#FF6B6B",
-    textAlign: "center",
-    marginBottom: 14,
-    fontSize: 14,
   },
 });

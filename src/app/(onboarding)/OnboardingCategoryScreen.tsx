@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -11,25 +11,27 @@ import { LinearGradient } from "expo-linear-gradient";
 import { colors } from "../../constants/colors";
 import { CATEGORY_COLORS } from "../../constants/categoryColors";
 import { useOnboarding } from "../../providers/OnboardingProvider";
+import { Ionicons } from "@expo/vector-icons";
 
-
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
 
 const PRESET_LABELS = [
   "💼 Work",
-  "📚 School",
-  "🏋️ Fitness",
-  "👥 Social",
-  "🧽 Chores",
+  "🎓 Academics",
+  "🧽 Personal Care",
+  "🏃 Physical Activity",
+  "🧘 Meditation",
+  "😴 Naps",
+  "🍽️ Food",
+  "👥 Friends/Family",
+  "🤝 Networking",
+  "🌍 Errands",
   "🎨 Creative",
-  "🧠 Deep Work",
-  "📖 Reading",
   "🎧 Learning",
-  "🎮 Gaming",
-  "🍿 Entertainment",
-  "🥗 Meal Prep",
-  "🧘 Self Care",
-  "😴 Rest",
+  "📺 TV",
+  "🎮 Play",
+  "🌿 Leisure",
+  "📱 Social Media",
   "🛑 Unproductive",
 ];
 
@@ -46,10 +48,13 @@ export default function OnboardingCategoryScreen({
   onBack,
   step = 7,
 }: Props) {
-  const { setCategories } = useOnboarding();
-  const MAX_SELECT = 10;
+  const {
+    draftCategoryIds,
+    setDraftCategoryIds,
+    setCategories,
+  } = useOnboarding();
 
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const MAX_SELECT = 10;
 
   const categories = PRESET_LABELS.map((label, i) => ({
     id: `preset-${i}`,
@@ -58,22 +63,25 @@ export default function OnboardingCategoryScreen({
   }));
 
   function toggleCategory(id: string) {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else if (next.size < MAX_SELECT) next.add(id);
-      return next;
+    setDraftCategoryIds(prev => {
+      if (prev.includes(id)) {
+        return prev.filter(x => x !== id);
+      }
+      if (prev.length >= MAX_SELECT) return prev;
+      return [...prev, id];
     });
   }
 
-  const canContinue = selected.size >= 3;
+  const canContinue = draftCategoryIds.length >= 3;
 
   function stripEmoji(label: string) {
     return label.replace(/^[^\w]+/g, "").trim();
   }
 
   function handleContinue() {
-    const chosen = categories.filter(c => selected.has(c.id));
+    const chosen = categories.filter(c =>
+      draftCategoryIds.includes(c.id)
+    );
     setCategories(chosen.map(c => stripEmoji(c.label)));
     onContinue();
   }
@@ -81,22 +89,29 @@ export default function OnboardingCategoryScreen({
   return (
     <LinearGradient
       colors={["#050816", colors.background ?? "#0B1224", "#111827"]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      {/* PROGRESS */}
+      {/* HEADER */}
+      <View style={styles.headerRow}>
+        <View style={styles.backSlot}>
+          {onBack && (
+            <Pressable onPress={onBack} hitSlop={12} style={styles.backButton}>
+              <Ionicons name="chevron-back" size={26} color="#FFF" />
+            </Pressable>
+          )}
+        </View>
 
-      <View style={styles.progressContainer}>
-        {Array.from({ length: 11 }).map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.progressDot,
-              i + 1 <= step && styles.activeDot,
-            ]}
-          />
-        ))}
+        <View style={styles.progressContainer}>
+          {Array.from({ length: 11 }).map((_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.progressDot,
+                i + 1 <= step && styles.activeDot,
+              ]}
+            />
+          ))}
+        </View>
       </View>
 
       {/* CONTENT */}
@@ -110,26 +125,29 @@ export default function OnboardingCategoryScreen({
         </Text>
 
         <Text style={styles.sub}>
-          Pick the categories that match your life.
+          Pick at least 3 categories that match your life.
         </Text>
 
         <View style={styles.chipContainer}>
           {categories.map(cat => {
-            const isSelected = selected.has(cat.id);
+            const isSelected = draftCategoryIds.includes(cat.id);
 
             return (
               <Pressable
                 key={cat.id}
+                onPress={() => toggleCategory(cat.id)}
                 style={[
                   styles.chip,
                   isSelected && { backgroundColor: cat.color },
                 ]}
-                onPress={() => toggleCategory(cat.id)}
               >
                 <Text
                   style={[
                     styles.chipText,
-                    isSelected && { color: "#0B1224", fontWeight: "700" },
+                    isSelected && {
+                      color: "#0B1224",
+                      fontWeight: "700",
+                    },
                   ]}
                 >
                   {cat.label}
@@ -157,7 +175,7 @@ export default function OnboardingCategoryScreen({
       </Pressable>
 
       {onSkip && (
-        <Pressable style={styles.skip} onPress={onSkip}>
+        <Pressable onPress={onSkip}>
           <Text style={styles.skipText}>Skip</Text>
         </Pressable>
       )}
@@ -170,30 +188,45 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: 80,
     paddingHorizontal: 20,
-    alignItems: "center",
     justifyContent: "space-between",
   },
 
-  /** Progress **/
+  headerRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+
+  backSlot: {
+    width: 44,
+  },
+
+  backButton: {
+    width: 44,
+    height: 44,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   progressContainer: {
     flexDirection: "row",
     gap: 6,
-    marginBottom: 20,
   },
+
   progressDot: {
-    width: width * 0.07,
+    width: width * 0.055,
     height: 4,
     borderRadius: 4,
     backgroundColor: "#2A2A2A",
   },
+
   activeDot: {
     backgroundColor: "#FFF",
   },
 
-  /** Content **/
   content: {
     flexGrow: 1,
-    paddingTop: 10,
     paddingBottom: 30,
   },
 
@@ -201,7 +234,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 24,
     fontWeight: "700",
-    lineHeight: 32,
     color: "#FFF",
     marginBottom: 10,
   },
@@ -227,7 +259,7 @@ const styles = StyleSheet.create({
   },
 
   chipText: {
-    color: "#FFFFFF",
+    color: "#FFF",
     fontSize: 15,
     fontWeight: "600",
   },
@@ -237,10 +269,8 @@ const styles = StyleSheet.create({
     color: "#8EA2C8",
     fontSize: 14,
     marginTop: 16,
-    marginBottom: 16,
   },
 
-  /** Buttons **/
   nextButton: {
     width: width * 0.88,
     height: 56,
@@ -251,18 +281,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 40,
   },
+
   nextText: {
     color: "#FFF",
     fontSize: 18,
     fontWeight: "600",
   },
 
-  skip: {
-    alignSelf: "center",
-    marginBottom: 32,
-  },
   skipText: {
     color: "#8EA2C8",
-    fontSize: 15,
+    textAlign: "center",
+    marginBottom: 32,
   },
 });

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, ScrollView, StyleSheet, Pressable } from "react-native";
+import { View, Text, ScrollView, StyleSheet, Pressable, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { breakdownByCategory, breakdownByOutcome } from "../../../types/outcomes";
@@ -33,6 +33,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import InsightsSkeleton from "../../../components/insights/InsightsSkeleton";
 import AnimatedTabWrapper from "../../../components/AnimatedTabWrapper";
 import InsightsEmptyState from "../../../components/insights/InsightsEmptyState";
+import DayHistorySheet from "../../../components/insights/DayHistorySheet";
 
 const colors = {
   background: "#0B1224",
@@ -64,6 +65,8 @@ export default function Insights() {
 
   const [showBreakdownModal, setShowBreakdownModal] = useState(false);
   const [showSummaryPopup, setShowSummaryPopup] = useState(false);
+  const [showDayHistory, setShowDayHistory] = useState(false);
+
 
   const scrollRef = useRef<ScrollView>(null);
   const { insightsCache } = useData();
@@ -228,7 +231,12 @@ const analyticsBlocks = useMemo(() => {
   const cutoff = new Date(selectedDay.end_time);
 
 
-  return blocks.filter(block => block.startTime < cutoff);
+  return blocks.filter(
+  block =>
+    block.startTime < cutoff &&
+    block.status !== "unknown"
+);
+
 }, [blocks, selectedDay]);
 
 console.log(analyticsBlocks)
@@ -238,7 +246,12 @@ console.log(analyticsBlocks)
 const hasBlocks = analyticsBlocks.length > 0;
 
 const classifiedBlocks = useMemo(
-  () => (hasBlocks ? analyticsBlocks.map(toClassifiedBlock) : []),
+  () =>
+    hasBlocks
+      ? analyticsBlocks
+          .filter(b => b.status !== "unknown")
+          .map(toClassifiedBlock)
+      : [],
   [analyticsBlocks, hasBlocks]
 );
 
@@ -309,8 +322,15 @@ const topCategoryData = [...categoryBarData]
     )
   : "";
 
-const blocksCompleted = classifiedBlocks.filter(b => b.wasLogged).length;
-const blocksMissed = analyticsBlocks.length - blocksCompleted;
+const blocksCompleted = analyticsBlocks.filter(
+  b => b.status === "logged"
+).length;
+
+const blocksMissed = analyticsBlocks.filter(
+  b => b.status === "missed"
+).length;
+
+
 
   
 const worstWindow =
@@ -353,14 +373,19 @@ const worstWindow =
              showsVerticalScrollIndicator={false}>
               
         {/* HEADER */}
-        <View style={styles.header}>
-                         <View style={styles.brandLeft}>
-                           <View style={styles.logoCircle}>
-                             <Ionicons name="time-outline" size={18} color={colors.textPrimary} />
-                           </View>
-                           <Text style={styles.brandText}>15 Productivity</Text>
-                         </View>
-                       </View>
+         <View style={styles.header}>
+                                 <View style={styles.brandLeft}>
+                         
+                  <Image
+                    source={require("../../../assets/images/fifteen.png")}
+                    style={styles.logoImage}
+                    resizeMode="contain"
+                  />
+                
+                
+                                   <Text style={styles.brandText}>15 Productivity</Text>
+                                 </View>
+                                </View>
 
         {/* DAY STRIP */}
         <DateStrip
@@ -373,16 +398,24 @@ const worstWindow =
 </Text>
 
         {/* PRODUCTIVITY SCORE */}
-        <View style={styles.heroCard}>
-          <ProductivityCircle
-            score={dayScore.percent}
-            deltaText={""} // add later
-          />
+       <View style={styles.heroCard}>
+  <ProductivityCircle
+    score={dayScore.percent}
+    deltaText={""}
+  />
 
-          <Text style={styles.blockMeta}>
-            {blocksCompleted} blocks completed · {blocksMissed} missed
-          </Text>
-        </View>
+  <Text style={styles.blockMeta}>
+    {blocksCompleted} blocks completed · {blocksMissed} missed
+  </Text>
+
+  <Pressable
+    style={styles.viewDayButton}
+    onPress={() => setShowDayHistory(true)}
+  >
+    <Text style={styles.viewDayText}>View full day →</Text>
+  </Pressable>
+</View>
+
 
 
         {/* TIME BREAKDOWN (stubbed with real blocks later) */}
@@ -460,6 +493,13 @@ const worstWindow =
   onChangeMode={setBreakdownMode}
 />
 
+<DayHistorySheet
+  visible={showDayHistory}
+  onClose={() => setShowDayHistory(false)}
+  blocks={analyticsBlocks}
+/>
+
+
 {report?.ai_summary && (
   <AISummaryPopup
     visible={showSummaryPopup}
@@ -489,16 +529,6 @@ const styles = StyleSheet.create({
   },
 
   /* ---------------- HEADER ---------------- */
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  headerText: {
-    color: colors.textPrimary,
-    fontSize: 18,
-    fontWeight: "600",
-  },
 
   dateRange: {
     textAlign: "center",
@@ -570,11 +600,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     marginBottom: 4,
   },
-  brandLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10 as any,
-  },
+
   logoCircle: {
     width: 30,
     height: 30,
@@ -585,12 +611,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  brandText: {
-    color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: "700",
-    letterSpacing: 0.2,
-  },
+
   headerRightPill: {
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -642,4 +663,43 @@ const styles = StyleSheet.create({
       flex: 1,
       backgroundColor: colors.background,
     },
+    
+    brandLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    
+    logoImage: {
+      width: 24,
+      height: 24,
+      borderRadius: 4
+    },
+    
+    brandText: {
+      color: colors.textPrimary,
+        fontSize: 16,
+        fontWeight: "700",
+        letterSpacing: 0.2,
+    },
+    header: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 14,
+      },
+      
+      headerText: { color: "#EAEAF0", fontSize: 18, fontWeight: "600" },
+      viewDayButton: {
+  marginTop: 10,
+  paddingVertical: 6,
+},
+
+viewDayText: {
+  color: colors.accent,
+  fontSize: 13,
+  fontWeight: "700",
+},
+
+    
 });

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -9,9 +9,10 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors } from "../../constants/colors";
+import { Ionicons } from "@expo/vector-icons";
+import { useOnboarding } from "../../providers/OnboardingProvider";
 
-
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
 
 const OPTIONS = [
   {
@@ -50,11 +51,10 @@ type Props = {
 
 export default function OnboardingTimeAwarenessScreen({
   onContinue,
-  onSkip,
   onBack,
   step = 3,
 }: Props) {
-  const [selected, setSelected] = useState<string | null>(null);
+  const { timeAwareness, setTimeAwareness } = useOnboarding();
 
   return (
     <LinearGradient
@@ -63,18 +63,34 @@ export default function OnboardingTimeAwarenessScreen({
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      {/* PROGRESS */}
+      {/* HEADER */}
+      <View style={styles.headerRow}>
+        <View style={styles.backSlot}>
+          {onBack && step > 1 && (
+            <Pressable
+              onPress={onBack}
+              hitSlop={12}
+              style={({ pressed }) => [
+                styles.backButton,
+                pressed && { opacity: 0.6 },
+              ]}
+            >
+              <Ionicons name="chevron-back" size={26} color="#FFF" />
+            </Pressable>
+          )}
+        </View>
 
-      <View style={styles.progressContainer}>
-        {Array.from({ length: 11 }).map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.progressDot,
-              i + 1 <= step && styles.activeDot,
-            ]}
-          />
-        ))}
+        <View style={styles.progressContainer}>
+          {Array.from({ length: 11 }).map((_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.progressDot,
+                i + 1 <= step && styles.activeDot,
+              ]}
+            />
+          ))}
+        </View>
       </View>
 
       {/* CONTENT */}
@@ -89,7 +105,7 @@ export default function OnboardingTimeAwarenessScreen({
 
         <View style={styles.options}>
           {OPTIONS.map(opt => {
-            const active = selected === opt.key;
+            const active = timeAwareness === opt.key;
             return (
               <Pressable
                 key={opt.key}
@@ -97,7 +113,7 @@ export default function OnboardingTimeAwarenessScreen({
                   styles.card,
                   active && styles.cardActive,
                 ]}
-                onPress={() => setSelected(opt.key)}
+                onPress={() => setTimeAwareness(opt.key)}
               >
                 <Text
                   style={[
@@ -119,12 +135,12 @@ export default function OnboardingTimeAwarenessScreen({
 
       {/* NEXT */}
       <Pressable
-        disabled={!selected}
+        disabled={!timeAwareness}
         style={[
           styles.nextButton,
-          !selected && { opacity: 0.4 },
+          !timeAwareness && { opacity: 0.4 },
         ]}
-        onPress={() => selected && onContinue(selected)}
+        onPress={() => timeAwareness && onContinue(timeAwareness)}
       >
         <Text style={styles.nextText}>Next</Text>
       </Pressable>
@@ -141,23 +157,43 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
 
-  /** Progress **/
+  headerRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    marginBottom: 16,
+  },
+
+  backSlot: {
+    width: 44,
+    alignItems: "flex-start",
+  },
+
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   progressContainer: {
     flexDirection: "row",
     gap: 6,
-    marginBottom: 20,
   },
+
   progressDot: {
-    width: width * 0.07,
+    width: width * 0.055,
     height: 4,
     borderRadius: 4,
     backgroundColor: "#2A2A2A",
   },
+
   activeDot: {
     backgroundColor: "#FFF",
   },
 
-  /** Content **/
   content: {
     flexGrow: 1,
     paddingTop: 10,
@@ -185,17 +221,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     backgroundColor: "rgba(15,23,42,0.85)",
   },
+
   cardActive: {
     backgroundColor: "#FFFFFF",
   },
+
   cardTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: "#E5E7EB",
   },
+
   cardTitleActive: {
     color: "#020617",
   },
+
   cardDesc: {
     marginTop: 6,
     fontSize: 14,
@@ -203,7 +243,6 @@ const styles = StyleSheet.create({
     color: "#4B5563",
   },
 
-  /** Button **/
   nextButton: {
     width: width * 0.88,
     height: 56,
@@ -214,6 +253,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 40,
   },
+
   nextText: {
     color: "#FFF",
     fontSize: 18,

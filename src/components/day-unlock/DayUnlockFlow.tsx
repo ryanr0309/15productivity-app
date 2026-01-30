@@ -6,6 +6,7 @@ import { ensureTimeBlocksExist } from "../../utils/blocks";
 import { useData } from "../../providers/DataProvider";
 import { Text, View } from "react-native";
 import { HomeLoadingScreen } from "./Preparing";
+import HabitsPlacementLoadingScreen from "../habits/HabitLoading";
 
 type Props = {
   day: any | null;
@@ -111,7 +112,7 @@ export default function DayUnlockFlow({ day, onDayChanged }: Props) {
    * parent will render Home
    * ────────────────────────────────────────────── */
   return (
-    <HomeLoadingScreen/>
+    <HabitsPlacementLoadingScreen/>
   )
 }
 

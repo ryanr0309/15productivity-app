@@ -5,6 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -103,36 +104,60 @@ export default function Lab() {
       >
         {/* HEADER */}
         <View style={styles.header}>
-          <Ionicons name="flask-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.headerText}>Lab</Text>
-        </View>
+                         <View style={styles.brandLeft}>
+                 
+          <Image
+            source={require("../../../assets/images/fifteen.png")}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
+        
+        
+                           <Text style={styles.brandText}>15 Productivity</Text>
+                         </View>
+                        </View>
 
         {/* ===================== GOALS ===================== */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Goals</Text>
-            <TouchableOpacity onPress={() => setIsEditGoalsOpen(true)}>
-              <Ionicons
-                name="pencil"
-                size={16}
-                color={colors.textSecondary}
-              />
-            </TouchableOpacity>
-          </View>
+     <View style={styles.section}>
+  <View style={styles.sectionHeader}>
+    <Text style={styles.sectionTitle}>Goals</Text>
+    <TouchableOpacity onPress={() => setIsEditGoalsOpen(true)}>
+      <Ionicons
+        name="pencil"
+        size={16}
+        color={colors.textSecondary}
+      />
+    </TouchableOpacity>
+  </View>
 
-          <View style={styles.goalsContainer}>
-            {goals.length === 0 ? (
-              <Text style={styles.goalEmptyText}>No goals yet</Text>
-            ) : (
-              goals.map((goal, index) => (
-                <View key={index} style={styles.goalRow}>
-                  <View style={styles.goalDot} />
-                  <Text style={styles.goalText}>{goal}</Text>
-                </View>
-              ))
-            )}
-          </View>
-        </View>
+  <View style={styles.goalsContainer}>
+    {goals.length === 0 ? (
+      <Text style={styles.goalEmptyText}>No goals yet</Text>
+    ) : (
+      goals.map((goal, index) => {
+  const formattedGoal =
+    goal.length > 0
+      ? goal.charAt(0).toUpperCase() + goal.slice(1)
+      : goal;
+
+  return (
+    <View key={index} style={styles.goalRow}>
+      <Ionicons
+        name="star"
+        size={12}
+        color={colors.accent}
+        style={{ marginTop: 3, marginRight: 8 }}
+      />
+      <Text style={styles.goalText}>
+        {formattedGoal}
+      </Text>
+    </View>
+  );
+})
+    )}
+  </View>
+</View>
+
 
         {/* ===================== HABITS ===================== */}
         <View style={styles.section}>
@@ -268,17 +293,7 @@ const styles = StyleSheet.create({
     paddingBottom: 28,
     gap: 12,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 20,
-  },
-  headerText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "600",
-  },
+
   section: {
     marginBottom: 32,
   },
@@ -418,5 +433,33 @@ emptySubtitle: {
   textAlign: "center",
   maxWidth: 240,
 },
+
+
+brandLeft: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 10,
+},
+
+logoImage: {
+  width: 24,
+  height: 24,
+  borderRadius: 4
+},
+
+brandText: {
+  color: colors.textPrimary,
+    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+},
+header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  
+  headerText: { color: "#EAEAF0", fontSize: 18, fontWeight: "600" },
 
 });

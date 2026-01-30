@@ -14,7 +14,8 @@ export type Block = {
   timeLabel: string;
 
   // 🔑 SOURCE OF TRUTH
-  status: "upcoming" | "active" | "logged" | "missed";
+  status: "upcoming" | "active" | "logged" | "missed" | "unknown";
+
 
   // 🔁 DERIVED (never persisted)
   completed: boolean;
@@ -36,12 +37,12 @@ export type Block = {
 
 
 
-
 type BlockState =
   | "upcoming"
   | "active"
   | "completed"
-  | "missed";
+  | "missed"
+  | "unknown"; // 👈 ADD
 
 
 
@@ -49,6 +50,7 @@ export function getBlockState(
   block: Block,
   now = Date.now()
 ): BlockState {
+  if (block.status === "unknown") return "unknown";
   if (block.status === "logged") return "completed";
   if (block.status === "missed") return "missed";
 
@@ -60,6 +62,7 @@ export function getBlockState(
 
   return "upcoming";
 }
+
 
 
 export function didCompletePlannedHabit(block: Block) {

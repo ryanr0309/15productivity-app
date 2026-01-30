@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useScrollToTop } from "@react-navigation/native";
 import { useData } from "../../../providers/DataProvider";
 import { useAuth } from "../../../hooks/useAuth";
-import {View,Text,StyleSheet,ScrollView,Pressable, Platform, FlatList} from "react-native";
+import {View,Text,StyleSheet,ScrollView,Pressable, Platform, FlatList, Image} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../../../lib/supabase";
@@ -32,6 +32,7 @@ import { Block } from "../../../utils/timeBlocks";
 import { closeDay } from "../../../utils/dayLifecycle";
 import HomeAnalyticsLoading from "../../../components/home/HomeAnalyticsLoading";
 import AnalyticsSummarySheet from "../../../components/home/AnalyticsSummarySheet";
+
 
 
 const colors = {
@@ -80,6 +81,10 @@ export default function Home() {
 
 const [postDayState, setPostDayState] =
   useState<PostDayState>("idle");
+
+  const [isMultiSelect, setIsMultiSelect] = useState(false);
+const [selectedBlockIds, setSelectedBlockIds] = useState<Set<string>>(new Set());
+
 
 const initial: Block[] =
   openDay?.id &&
@@ -276,6 +281,41 @@ function handleLogNow() {
 
 /* ================= RENDER ================= */
 
+function toggleBlockSelection(blockId: string) {
+  setSelectedBlockIds(prev => {
+    const next = new Set(prev);
+    next.has(blockId) ? next.delete(blockId) : next.add(blockId);
+    return next;
+  });
+}
+
+async function saveMultiBlock(
+  categoryId: string | null,
+  description: string
+) {
+  const ids = Array.from(selectedBlockIds);
+
+  const category =
+    categoryId
+      ? categories.find(c => c.id === categoryId) ?? null
+      : null;
+
+  await Promise.all(
+    ids.map(blockId =>
+      saveTimeBlock({
+        blockId,
+        categoryId,
+        categoryLabel: category?.label ?? null,
+        categoryColor: category?.color ?? null,
+        description,
+      })
+    )
+  );
+
+  setIsMultiSelect(false);
+  setSelectedBlockIds(new Set());
+}
+
 
 function renderContent() {
  
@@ -288,9 +328,14 @@ function renderContent() {
         {/* HEADER */}
        <View style={styles.header}>
                  <View style={styles.brandLeft}>
-                   <View style={styles.logoCircle}>
-                     <Ionicons name="time-outline" size={18} color={colors.textPrimary} />
-                   </View>
+         
+  <Image
+    source={require("../../../assets/images/fifteen.png")}
+    style={styles.logoImage}
+    resizeMode="contain"
+  />
+
+
                    <Text style={styles.brandText}>15 Productivity</Text>
                  </View>
        
@@ -422,39 +467,80 @@ function renderContent() {
 </View>
 </View>
 
-<View style={styles.sectionHeader}>
+<View style={styles.sectionHeaderRow}>
+  <View>
     <Text style={styles.sectionTitle}>Time Blocks</Text>
-    <Text style={styles.sectionSubtitle}>15-minute universal schedule</Text>
+    <Text style={styles.sectionSubtitle}>
+      15-minute universal schedule
+    </Text>
+  </View>
+
+
+  <Pressable
+    onPress={() => {
+      setIsMultiSelect(!isMultiSelect);
+      setSelectedBlockIds(new Set());
+    }}
+    style={styles.selectBtn}
+  >
+    <Text style={styles.selectBtnText}>
+      {isMultiSelect ? "Cancel" : "Multi-Select"}
+    </Text>
+  </Pressable>
 </View>
 
+
+{isMultiSelect && selectedBlockIds.size > 0 && (
+  <View style={styles.multiActionBar}>
+    <Text style={styles.multiActionText}>
+      {selectedBlockIds.size} blocks selected
+    </Text>
+
+    <Pressable
+      style={styles.multiActionBtn}
+      onPress={() => setIsTimeBlockModalOpen(true)}
+    >
+      <Text style={styles.multiActionBtnText}>
+        Log Activity
+      </Text>
+    </Pressable>
+  </View>
+)}
             {/* GRID */}
 
 <FlatList
   data={blocks}
   keyExtractor={(item) => item.id}
   numColumns={3}
-  scrollEnabled={false} // 👈 IMPORTANT: parent handles scroll
+  scrollEnabled={false}
   columnWrapperStyle={styles.gridRow}
   contentContainerStyle={styles.gridContainer}
   renderItem={({ item, index }) => {
-    const plannedHabit = habits.find(
-      h => h.id === item.habit_id
-    );
+    const plannedHabit = habits.find(h => h.id === item.habit_id);
+    const category = categories.find(c => c.id === item.categoryId);
 
-    const category = categories.find(
-      c => c.id === item.categoryId
-    );
-
-    return (
+      return (
+    <View style={styles.gridItem}>
       <TimeBlockCard
         block={item}
         plannedHabit={plannedHabit}
         loggedCategory={category}
-        onPress={() => handleOpenBlock(index)}
+        selectionMode={isMultiSelect}
+        isSelected={selectedBlockIds.has(item.id)}
+        onPress={() => {
+          if (isMultiSelect) {
+            toggleBlockSelection(item.id);
+          } else {
+            handleOpenBlock(index);
+          }
+        }}
       />
-    );
+    </View>
+      );
   }}
 />
+
+
 
 
 
@@ -504,7 +590,8 @@ if (postDayState === "closing" || postDayState === "analyzing") {
   onDismiss={() => setPostDayState("cooldown")}
 />
 
-      {activeBlock && openDay && (
+      {(isMultiSelect || activeBlock) && openDay && (
+
         
   <Modal
     isVisible={isTimeBlockModalOpen}
@@ -523,22 +610,52 @@ if (postDayState === "closing" || postDayState === "analyzing") {
     avoidKeyboard
   >
 
+<TimeBlockModal
+  blockId={activeBlock?.id ?? "__bulk__"}
+  timeRange={
+    isMultiSelect
+      ? `${selectedBlockIds.size} blocks selected`
+      : activeBlock!.timeLabel
+  }
+  dateLabel={new Date().toDateString()}
+  initialCategoryId={
+    isMultiSelect ? null : activeBlock!.categoryId
+  }
+  initialDescription={
+    isMultiSelect ? "" : activeBlock!.description
+  }
+  editCount={isMultiSelect ? 0 : activeBlock!.edit_count ?? 0}
+  onAddCategory={addCategory}
+  onDeleteCategory={deleteCategory}
+  onSave={async (categoryId, description, status = "logged") => {
+  if (isMultiSelect) {
+    return saveMultiBlock(categoryId, description);
+  }
 
-  <TimeBlockModal
-    blockId={activeBlock.id}
-    timeRange={activeBlock.timeLabel}
-    dateLabel={new Date().toDateString()}
-    initialCategoryId={activeBlock.categoryId}
-    initialDescription={activeBlock.description}
-    editCount={activeBlock.edit_count ?? 0}
-    onAddCategory={addCategory}
-    onDeleteCategory={deleteCategory}
-    onSave={saveTimeBlock}
-    onClose={() => {
-      setIsTimeBlockModalOpen(false);
-      setActiveBlockIndex(null);
-    }}
-  />
+  const category =
+    categoryId
+      ? categories.find(c => c.id === categoryId) ?? null
+      : null;
+
+  await saveTimeBlock({
+    blockId: activeBlock!.id,
+    status, // ✅ THIS IS ESSENTIAL
+    categoryId,
+    categoryLabel: category?.label ?? null,
+    categoryColor: category?.color ?? null,
+    description,
+  });
+}}
+
+  onClose={() => {
+    setIsTimeBlockModalOpen(false);
+    setActiveBlockIndex(null);
+    setIsMultiSelect(false);
+    setSelectedBlockIds(new Set());
+  }}
+/>
+
+
   </Modal>
 
   
@@ -649,9 +766,10 @@ gridContainer: {
 },
 
 gridRow: {
-  justifyContent: "space-between",
-  marginBottom: 10,
+  justifyContent: "space-between",               // 👈 horizontal spacing
+  marginBottom: 10,        // 👈 vertical spacing
 },
+
 
 
   modalOverlay: {
@@ -909,4 +1027,71 @@ press: {
   borderWidth: 1,
   borderColor: colors.border,
 },
+logoImage: {
+  width: 24,
+  height: 24,
+  borderRadius: 4
+},
+sectionHeaderRow: {
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginTop: 4,
+  marginBottom: 10,
+},
+
+selectBtn: {
+  paddingHorizontal: 12,
+  paddingVertical: 6,
+  borderRadius: 999,
+  backgroundColor: colors.card,
+  borderWidth: 1,
+  borderColor: colors.border,
+},
+
+selectBtnText: {
+  color: colors.textPrimary,
+  fontSize: 12,
+  fontWeight: "800",
+},
+multiActionBar: {
+  marginTop: 10,
+  marginBottom: 12,
+  backgroundColor: colors.cardStrong,
+  borderRadius: 14,
+  paddingHorizontal: 14,
+  paddingVertical: 12,
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  borderWidth: 1,
+  borderColor: colors.border,
+},
+
+
+multiActionText: {
+  color: colors.textPrimary,
+  fontSize: 13,
+  fontWeight: "700",
+},
+
+multiActionBtn: {
+  backgroundColor: colors.accent,
+  paddingHorizontal: 14,
+  paddingVertical: 8,
+  borderRadius: 12,
+},
+
+multiActionBtnText: {
+  color: "#FFFFFF",
+  fontSize: 13,
+  fontWeight: "800",
+},
+gridItem: {
+  flex: 1,
+  marginHorizontal: 5, // horizontal spacing
+},
+
+
+
 });

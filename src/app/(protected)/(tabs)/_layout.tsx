@@ -13,24 +13,18 @@ import { PaywallGate } from "../../../components/PaywallGate";
 export default function TabsLayout() {
   const { hydrated, hydrate } = useData();
 
-   const { paywallState } = useBilling();
 
-   console.log("paywallState:", paywallState);
 
    useEffect(() => {
     hydrate();
   }, []);
 
 
-  if (paywallState === "LOADING") {
-    return <AppSplash />;
-  }
- 
 
   if (!hydrated) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" />
+        <AppSplash />
       </View>
     );
   }

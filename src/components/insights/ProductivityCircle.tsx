@@ -1,7 +1,6 @@
 import { View, Text, StyleSheet } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { colors } from "../../constants/colors";
-
 import React from "react";
 
 type ProductivityCircleProps = {
@@ -14,12 +13,21 @@ const STROKE_WIDTH = 10;
 const RADIUS = (SIZE - STROKE_WIDTH) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
+/* ───────────────── COLOR LOGIC ───────────────── */
+
+function getScoreColor(score: number) {
+  if (score <= 40) return "#EF4444"; // red
+  if (score <= 69) return "#F59E0B"; // orange
+  return "#22C55E";                 // green
+}
+
 export default function ProductivityCircle({
   score,
   deltaText,
 }: ProductivityCircleProps) {
   const progress = Math.min(Math.max(score / 100, 0), 1);
   const strokeDashoffset = CIRCUMFERENCE * (1 - progress);
+  const ringColor = getScoreColor(score);
 
   return (
     <View style={styles.wrapper}>
@@ -40,7 +48,7 @@ export default function ProductivityCircle({
             cx={SIZE / 2}
             cy={SIZE / 2}
             r={RADIUS}
-            stroke="#4CD964"
+            stroke={ringColor}
             strokeWidth={STROKE_WIDTH}
             fill="none"
             strokeDasharray={CIRCUMFERENCE}
@@ -53,7 +61,9 @@ export default function ProductivityCircle({
 
         {/* Score */}
         <View style={styles.centerText}>
-          <Text style={styles.score}>{score}</Text>
+          <Text style={[styles.score, { color: ringColor }]}>
+            {score}
+          </Text>
         </View>
       </View>
 
@@ -85,7 +95,6 @@ const styles = StyleSheet.create({
   score: {
     fontSize: 28,
     fontWeight: "700",
-    color: colors.textPrimary,
   },
 
   delta: {

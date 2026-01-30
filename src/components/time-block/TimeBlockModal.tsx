@@ -21,28 +21,29 @@ import ConfirmDeleteCategoryModal from "../home/ConfirmDeleteCategoryModal";
 
 
 type Props = {
-  blockId: string;                 // ✅ stable identity
+  blockId: string;
   timeRange: string;
   dateLabel: string;
 
   initialCategoryId: string | null;
   initialDescription: string;
 
-  editCount: number
+  editCount: number;
 
   onAddCategory: (category: Category) => void;
   onDeleteCategory: (categoryId: string) => void;
 
-  onSave: (data: {
-    blockId: string;
-    categoryId: string;
-    description: string;
-    categoryLabel: string;
-    categoryColor: string
-  }) => void;
+  // ✅ FIXED SIGNATURE
+  onSave: (
+  categoryId: string | null,
+  description: string,
+  status?: "logged" | "unknown"
+) => Promise<void>;
+
 
   onClose: () => void;
 };
+
 
 
 export default function TimeBlockModal({
@@ -61,7 +62,7 @@ export default function TimeBlockModal({
   const isLocked = editCount >= 2;
   const canEdit = editCount < 2
   ;
-  const MIN_DESCRIPTION_LENGTH = 8;
+  const MIN_DESCRIPTION_LENGTH = 0;
   const MAX_DESCRIPTION_LENGTH = 160;
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
     null
@@ -104,25 +105,27 @@ useEffect(() => {
 }, [initialCategoryId, safeInitialDescription, blockId]);
 
 
-function handleSave() {
+async function handleSave() {
   if (!selectedCategoryId) return;
 
-  const category = categories.find(
-    c => c.id === selectedCategoryId
-  );
-
-  if (!category) return;
-
-  onSave({
-    blockId,
-    categoryId: category.id,          // optional, but useful
-    categoryLabel: category.label,    // 🔒 SNAPSHOT
-    categoryColor: category.color,    // 🔒 SNAPSHOT
+  await onSave(
+    selectedCategoryId,
     description,
-  });
-
+    "logged"
+  );
   onClose();
 }
+
+
+async function handleDontRemember() {
+  await onSave(
+    null,
+    "__unknown__",
+    "unknown"
+  );
+  onClose();
+}
+
 
 
 function handleDeleteCategoryLocal(categoryId: string) {
@@ -227,7 +230,7 @@ function handleDeleteCategoryLocal(categoryId: string) {
 ) : (
   <Text style={styles.helper}>
     {trimmedDescription.length === 0
-      ? "Be specific — this helps your daily insights."
+      ? "Optional but recommended, helps give personalized feedback"
       : trimmedDescription.length < MIN_DESCRIPTION_LENGTH
       ? `Add ${MIN_DESCRIPTION_LENGTH - trimmedDescription.length} more characters`
       : trimmedDescription.length > MAX_DESCRIPTION_LENGTH
@@ -249,6 +252,16 @@ function handleDeleteCategoryLocal(categoryId: string) {
     {!canEdit ? "Locked" : isEditing ? "Update" : "Log"}
   </Text>
 </Pressable>
+<Pressable
+  onPress={handleDontRemember}
+  disabled={!canEdit}
+  style={styles.dontRememberBtn}
+>
+  <Text style={styles.dontRememberText}>
+    I don’t remember
+  </Text>
+</Pressable>
+
 
 
       
@@ -283,6 +296,7 @@ function handleDeleteCategoryLocal(categoryId: string) {
   </KeyboardAvoidingView> 
   );
 }
+
 
 const styles = StyleSheet.create({
   handle: {
@@ -376,7 +390,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: "center",
     marginTop: 20,
-    marginBottom: 60,
+    marginBottom: 12,
   },
 
   saveButtonDisabled: {
@@ -403,5 +417,17 @@ lockedHint: {
   marginBottom: 12,
   textAlign: "center",
 },
+dontRememberBtn: {
+  marginTop: 10,
+  alignItems: "center",
+  marginBottom: 60,
+},
+
+dontRememberText: {
+  color: "rgba(255,255,255,0.55)",
+  fontSize: 12,
+  fontWeight: "600",
+},
+
 
 });

@@ -80,13 +80,16 @@ async function saveTimeBlock({
   categoryLabel,
   categoryColor,
   description,
+  status = "logged",
 }: {
   blockId: string;
   categoryId: string | null;
   categoryLabel: string | null;
   categoryColor: string | null;
   description: string;
-}) {
+  status?: "logged" | "unknown";
+})
+ {
   pendingSaveRef.current.add(blockId);
 
   const currentBlock = blocks.find(b => b.id === blockId);
@@ -109,17 +112,21 @@ async function saveTimeBlock({
     return;
   }
 
-  const optimisticBlock: Block = {
+const optimisticBlock: Block = {
   ...currentBlock,
+
   categoryId,
   categoryLabel,
   categoryColor,
   description: nextDescription,
-  completed: Boolean(categoryId),
-  status: "logged" as const,
+
+  status,                       // ✅ KEY FIX
+  completed: status === "logged",
+
   classification: "neutral" as const,
   edit_count: currentBlock.edit_count + 1,
 };
+
 
   // 🟢 OPTIMISTIC UPDATE
   setBlocks(prev =>
@@ -130,13 +137,14 @@ async function saveTimeBlock({
   const { error } = await supabase
     .from("time_blocks")
     .update({
-      category_id: categoryId,
-      category_label: categoryLabel,
-      category_color: categoryColor,
-      description: nextDescription,
-      status: "logged",
-      edit_count: optimisticBlock.edit_count,
-    })
+  category_id: categoryId,
+  category_label: categoryLabel,
+  category_color: categoryColor,
+  description: nextDescription,
+  status,                        // ✅ FIX
+  edit_count: optimisticBlock.edit_count,
+})
+
     .eq("id", blockId)
     .lt("edit_count", 2); // 👈 FIXED
 

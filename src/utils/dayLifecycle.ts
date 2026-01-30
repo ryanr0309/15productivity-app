@@ -23,11 +23,13 @@ export async function closeDay({
   if (dayError) throw dayError;
 
   // 2️⃣ Mark all unlogged blocks as missed
-  const { error: blocksError } = await supabase
-    .from("time_blocks")
-    .update({ status: "missed" })
-    .eq("day_id", dayId)
-    .neq("status", "logged");
+// 2️⃣ Mark only truly unlogged blocks as missed
+const { error: blocksError } = await supabase
+  .from("time_blocks")
+  .update({ status: "missed" })
+  .eq("day_id", dayId)
+  .in("status", ["upcoming", "active"]);
+
 
   if (blocksError) throw blocksError;
 
