@@ -1,25 +1,40 @@
 import * as Notifications from "expo-notifications";
 import {
   scheduleMorningReminder,
-  scheduleNightReflection,
   cancelMorningReminder,
+  scheduleAfternoonReminder,
+  cancelAfternoonReminder,
+  scheduleNightReflection,
   cancelNightReflection,
 } from "./notifications";
 
+type Params = {
+  notifyMorning: boolean;
+  notifyAfternoon: boolean;
+  notifyNight: boolean;
+  estimatedSleepTime?: string | Date;
+};
+
 export async function reconcileNotifications({
   notifyMorning,
+  notifyAfternoon,
   notifyNight,
-}: {
-  notifyMorning: boolean;
-  notifyNight: boolean;
-}) {
+  estimatedSleepTime,
+}: Params) {
   const { status } = await Notifications.getPermissionsAsync();
 
+  /* ===================== PERMISSION GUARD ===================== */
+
   if (status !== "granted") {
-    await cancelMorningReminder();
-    await cancelNightReflection();
+    await Promise.all([
+      cancelMorningReminder(),
+      cancelAfternoonReminder(),
+      cancelNightReflection(),
+    ]);
     return;
   }
+
+  /* ===================== MORNING ===================== */
 
   if (notifyMorning) {
     await scheduleMorningReminder();
@@ -27,7 +42,17 @@ export async function reconcileNotifications({
     await cancelMorningReminder();
   }
 
-  if (notifyNight) {
+  /* ===================== AFTERNOON ===================== */
+
+  if (notifyAfternoon) {
+    await scheduleAfternoonReminder();
+  } else {
+    await cancelAfternoonReminder();
+  }
+
+  /* ===================== NIGHT (DYNAMIC, ONE-OFF) ===================== */
+
+   if (notifyNight) {
     await scheduleNightReflection();
   } else {
     await cancelNightReflection();

@@ -29,9 +29,11 @@ export default function NotificationsModal({ visible, onClose }: Props) {
     useState<PermissionStatus>("undetermined");
 
   const [prefs, setPrefs] = useState({
-    notify_morning: true,
-    notify_night: true,
-  });
+  notify_morning: true,
+  notify_afternoon: true, // ✅ NEW
+  notify_night: true,
+});
+
 
   /* ===================== LOAD PERMISSION ===================== */
 
@@ -49,13 +51,14 @@ export default function NotificationsModal({ visible, onClose }: Props) {
     if (!visible || !userId) return;
 
     supabase
-      .from("user_settings")
-      .select("notify_morning, notify_night")
-      .eq("user_id", userId)
-      .single()
-      .then(({ data }) => {
-        if (data) setPrefs(data);
-      });
+  .from("user_settings")
+  .select("notify_morning, notify_afternoon, notify_night")
+  .eq("user_id", userId)
+  .single()
+  .then(({ data }) => {
+    if (data) setPrefs(data);
+  });
+
   }, [visible, userId]);
 
   /* ===================== ACTIONS ===================== */
@@ -66,9 +69,10 @@ export default function NotificationsModal({ visible, onClose }: Props) {
   };
 
 const updatePref = async (
-  key: "notify_morning" | "notify_night",
+  key: "notify_morning" | "notify_afternoon" | "notify_night",
   value: boolean
 ) => {
+
   const next = { ...prefs, [key]: value };
   setPrefs(next);
 
@@ -78,9 +82,11 @@ const updatePref = async (
     .eq("user_id", userId);
 
   await reconcileNotifications({
-    notifyMorning: next.notify_morning,
-    notifyNight: next.notify_night,
-  });
+  notifyMorning: next.notify_morning,
+  notifyAfternoon: next.notify_afternoon,
+  notifyNight: next.notify_night,
+});
+
 
   console.log(
   "[NotificationsModal] scheduled notifications:",
@@ -169,6 +175,17 @@ const updatePref = async (
               
               />
             </View>
+
+<View style={styles.row}>
+  <Text style={styles.label}>Afternoon check-in</Text>
+  <Switch
+    value={prefs.notify_afternoon}
+    disabled={notificationsDisabled}
+    onValueChange={(v) =>
+      updatePref("notify_afternoon", v)
+    }
+  />
+</View>
 
             <View style={styles.row}>
               <Text style={styles.label}>Night reflection</Text>

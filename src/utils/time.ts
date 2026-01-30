@@ -39,13 +39,15 @@ export function roundUpToInterval(date: Date, interval: number) {
   return d;
 }
 
-export function formatTime(ts?: string | null) {
-  if (!ts) return "—";
-  return new Date(ts).toLocaleTimeString([], {
+export function formatTime(input: string | Date) {
+  const date = typeof input === "string" ? new Date(input) : input;
+
+  return date.toLocaleTimeString([], {
     hour: "numeric",
     minute: "2-digit",
   });
 }
+
 
 export function getCurrentBlockLabel(day: any) {
   if (!day) return "—";

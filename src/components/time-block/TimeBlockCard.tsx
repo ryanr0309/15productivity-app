@@ -49,17 +49,19 @@ export default function TimeBlockCard({
 
 
   const isDisabled = state === "upcoming";
-const isCompleted = state === "completed" && !isUnknown;
+const isCompleted =
+  state === "completed" &&
+  block.completed === true &&
+  block.status !== "unknown";
+
 const hasPlannedHabit = !!plannedHabit && !isCompleted && !isUnknown;
 
 const plannedCompleted =
-  !isUnknown &&
-  block.completed &&
+  isCompleted &&
   didCompletePlannedHabit(block);
 
 const showCompletedDot =
-  isCompleted && !plannedCompleted && !isUnknown;
-
+  isCompleted && !plannedCompleted;
 
   const displayTime =
     typeof block.timeLabel === "string"
@@ -145,45 +147,48 @@ const showCompletedDot =
 
       {/* ───────────────── CONTENT ───────────────── */}
 
-      {isCompleted ? (
-        <View style={styles.blockLeft}>
-          <Text
-            style={styles.primaryText}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {block.categoryLabel ?? "Completed"}
-          </Text>
+      {isUnknown ? (
+  <View style={styles.blockLeft}>
+    <Text style={styles.primaryText}>
+      {displayTime}
+    </Text>
+    <Text style={styles.blockSub}>Not remembered</Text>
+  </View>
+) : isCompleted ? (
+  <View style={styles.blockLeft}>
+    <Text
+      style={styles.primaryText}
+      numberOfLines={1}
+      ellipsizeMode="tail"
+    >
+      {block.categoryLabel ?? "Completed"}
+    </Text>
+    <Text style={styles.secondaryText}>
+      {displayTime}
+    </Text>
+  </View>
+) : hasPlannedHabit ? (
+  <View style={styles.blockLeft}>
+    <Text style={styles.primaryText}>
+      {displayTime}
+    </Text>
+    <Text
+      style={styles.plannedHint}
+      numberOfLines={1}
+      ellipsizeMode="tail"
+    >
+      ({plannedHabit!.name})
+    </Text>
+  </View>
+) : (
+  <View style={styles.blockLeft}>
+    <Text style={styles.primaryText}>
+      {displayTime}
+    </Text>
+    <Text style={styles.blockSub}>Tap to log</Text>
+  </View>
+)}
 
-          <Text style={styles.secondaryText}>
-            {displayTime}
-          </Text>
-        </View>
-      ) : hasPlannedHabit ? (
-        <View style={styles.blockLeft}>
-          <Text style={styles.primaryText}>
-            {displayTime}
-          </Text>
-
-          <Text
-            style={styles.plannedHint}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            ({plannedHabit!.name})
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.blockLeft}>
-        <Text style={styles.primaryText}>
-          {displayTime}
-        </Text>
-        <Text style={styles.blockSub}>
-  {isUnknown ? "Not remembered" : "Tap to log"}
-</Text>
-
-        </View>
-      )}
     </Pressable>
   );
 }

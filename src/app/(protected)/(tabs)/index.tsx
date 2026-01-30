@@ -291,7 +291,8 @@ function toggleBlockSelection(blockId: string) {
 
 async function saveMultiBlock(
   categoryId: string | null,
-  description: string
+  description: string,
+  status: "logged" | "unknown"
 ) {
   const ids = Array.from(selectedBlockIds);
 
@@ -300,17 +301,19 @@ async function saveMultiBlock(
       ? categories.find(c => c.id === categoryId) ?? null
       : null;
 
-  await Promise.all(
-    ids.map(blockId =>
-      saveTimeBlock({
-        blockId,
-        categoryId,
-        categoryLabel: category?.label ?? null,
-        categoryColor: category?.color ?? null,
-        description,
-      })
-    )
-  );
+ await Promise.all(
+  ids.map(blockId =>
+    saveTimeBlock({
+      blockId,
+      status, // ✅ THIS IS THE FIX
+      categoryId,
+      categoryLabel: category?.label ?? null,
+      categoryColor: category?.color ?? null,
+      description,
+    })
+  )
+);
+
 
   setIsMultiSelect(false);
   setSelectedBlockIds(new Set());
@@ -629,7 +632,7 @@ if (postDayState === "closing" || postDayState === "analyzing") {
   onDeleteCategory={deleteCategory}
   onSave={async (categoryId, description, status = "logged") => {
   if (isMultiSelect) {
-    return saveMultiBlock(categoryId, description);
+    return saveMultiBlock(categoryId, description,status);
   }
 
   const category =

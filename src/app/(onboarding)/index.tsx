@@ -46,7 +46,7 @@ const screens = [
   <FunctionalScreenExample
     step={humanStep}
     onBack={() => setStep(2)}
-    headline="We give you full visibility into your time usage to help you become more productive"
+    headline="You don't have to keep guessing. Awareness help you become more productive"
     image={require("../../assets/images/TimeBlockScreen.png")}
     onContinue={() => setStep(4)}
   />,

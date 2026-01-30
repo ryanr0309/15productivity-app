@@ -174,21 +174,27 @@ export default function Settings() {
         {/* ===================== SUPPORT ===================== */}
         <Section title="Support">
           <SettingsRow
-            icon="mail-outline"
-            title="Contact Support"
-            subtitle="Get help or report an issue"
-            onPress={() =>
-              Linking.openURL("ryanthony2007@gmail.com")
-            }
-          />
-          <SettingsRow
-            icon="bulb-outline"
-            title="Feature Requests"
-            subtitle="Suggest improvements"
-            onPress={() =>
-              Linking.openURL("ryanthony2007@gmail.com")
-            }
-          />
+  icon="mail-outline"
+  title="Contact Support"
+  subtitle="Get help or report an issue"
+  onPress={() =>
+    Linking.openURL(
+      "mailto:ryanthony2007@gmail.com?subject=15%20Productivity%20Support"
+    )
+  }
+/>
+
+        <SettingsRow
+  icon="bulb-outline"
+  title="Feature Requests"
+  subtitle="Suggest improvements"
+  onPress={() =>
+    Linking.openURL(
+      "mailto:ryanthony2007@gmail.com?subject=15%20Productivity%20Feature%20Request"
+    )
+  }
+/>
+
         </Section>
 
         {/* ===================== LEGAL ===================== */}
