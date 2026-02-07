@@ -82,18 +82,19 @@ export default function AnalyticsSummarySheet({
   const [breakdownMode, setBreakdownMode] =
     useState<"category" | "outcome">("category");
 
-  const categoryData = useMemo(
-    () => normalizeCategoryBreakdown(breakdownByCategory(blocks)),
-    [blocks]
-  );
+  const categoryData = useMemo(() => {
+  return normalizeCategoryBreakdown(
+    breakdownByCategory(blocks)
+  ).sort((a, b) => b.minutes - a.minutes); // 👈 highest first
+}, [blocks]);
 
-  const outcomeData = useMemo(
-    () =>
-      normalizeOutcomeBreakdown(
-        breakdownByOutcome(classifiedBlocks)
-      ),
-    [classifiedBlocks]
-  );
+
+const outcomeData = useMemo(() => {
+  return normalizeOutcomeBreakdown(
+    breakdownByOutcome(classifiedBlocks)
+  ).sort((a, b) => b.minutes - a.minutes);
+}, [classifiedBlocks]);
+ 
 
   const breakdownData =
     breakdownMode === "outcome" ? outcomeData : categoryData;
@@ -114,6 +115,8 @@ export default function AnalyticsSummarySheet({
   };
 
   /* ───────────── RENDER ───────────── */
+
+  console.log("Day Score", dayScore)
   return (
     <Modal
       isVisible={visible}

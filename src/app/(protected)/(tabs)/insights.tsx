@@ -308,10 +308,11 @@ const topCategoryData = [...categoryBarData]
   .sort((a, b) => b.minutes - a.minutes)
   .slice(0, TOP_N);
 
-  const data =
+const previewData =
   breakdownMode === "outcome"
     ? outcomeBarData
     : topCategoryData;
+
 
 
     
@@ -422,7 +423,7 @@ const worstWindow =
         <Pressable onPress={() => setShowBreakdownModal(true)}>
         <TimeBreakdownBar
         mode={breakdownMode}
-        data={data}
+        data={previewData}
         onChangeMode={setBreakdownMode}
         />
         </Pressable>

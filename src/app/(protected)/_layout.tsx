@@ -8,33 +8,28 @@ import { hasDismissedFreeTrial } from "../../lib/FreeTrial";
 
 export default function ProtectedLayout() {
   const { userId, authReady, validateSessionOrSignOut } = useAuth();
-  const {
-    loading: billingLoading,
-    isActive,
-    hasUsedTrial,
-  } = useBilling();
+  const { loading: billingLoading, isActive, hasUsedTrial } = useBilling();
   const { homeReady } = useData();
+
   const [dismissedTrial, setDismissedTrial] = useState<boolean | null>(null);
 
-
-useEffect(() => {
-  hasDismissedFreeTrial().then(setDismissedTrial);
-}, []);
-
+  useEffect(() => {
+    hasDismissedFreeTrial().then(setDismissedTrial);
+  }, []);
 
   useEffect(() => {
     if (!authReady) return;
     validateSessionOrSignOut();
-  }, [authReady]);
+  }, [authReady, validateSessionOrSignOut]);
 
-  
-  console.log(isActive, hasUsedTrial, dismissedTrial);
-  if (dismissedTrial === null) {
-  return <AppSplash />;
-}
+  // ✅ Single unified gate: if ANY required piece isn't ready, show splash.
+  const appNotReady =
+    !authReady ||
+    billingLoading ||
+    dismissedTrial === null ||
+    hasUsedTrial === null; // IMPORTANT: must be nullable from BillingProvider
 
-  // Wait for auth + billing hydration
-  if (!authReady || billingLoading) {
+  if (appNotReady) {
     return <AppSplash />;
   }
 
@@ -43,17 +38,18 @@ useEffect(() => {
     return <Redirect href="/(auth)/welcome" />;
   }
 
-  // ✅ Active entitlement → allow app
+  // Active entitlement → allow app
   if (isActive) {
     if (!homeReady) return <AppSplash />;
     return <Slot />;
   }
 
-  // ❌ Not active + trial available → Free Trial screen
-  if (!isActive && !hasUsedTrial && dismissedTrial === false) {
-  return <Redirect href="/paywall/FreeTrialScreen" />;
-}
+  // Not active + trial available + not dismissed → Free Trial screen
+  // IMPORTANT: use strict equality, not "!hasUsedTrial"
+  if (hasUsedTrial === false && dismissedTrial === false) {
+    return <Redirect href="/paywall/FreeTrialScreen" />;
+  }
 
-  // ❌ Not active + trial already used → locked app shell
+  // Not active + trial used OR dismissed → locked app shell
   return <Slot />;
 }

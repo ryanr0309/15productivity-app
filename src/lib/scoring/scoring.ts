@@ -27,9 +27,11 @@ export function scoreDay(blocks: ClassifiedBlock[]) {
     0
   );
 
+  console.log("Earned", earned);
   const maxPossible =
     blocks.length * (1.5 + LOGGING_CREDIT);
-
+console.log("Max Possible", maxPossible);
+console.log((earned / maxPossible) * 100)
 
   return {
     earned,

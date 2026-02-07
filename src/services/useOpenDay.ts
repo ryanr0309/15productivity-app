@@ -3,19 +3,19 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../hooks/useAuth";
 import { closeDay } from "../utils/dayLifecycle";
 
-async function maybeAutoEndDay(day: any): Promise<boolean> {
-  if (!day?.start_time || day.status !== "open") return false;
+async function maybeAutoEndDay(day: any): Promise<string | null> {
+  if (!day?.start_time || day.status !== "open") return null;
 
   const start = new Date(day.start_time);
   const now = new Date();
+  
+const hoursElapsed =
+  (now.getTime() - start.getTime()) / (1000 * 60 * 60);
 
-  const hoursElapsed =
-    (now.getTime() - start.getTime()) / (1000 * 60 * 60);
+if (hoursElapsed < 36) return null;
 
-  // ⛔ Not time yet
-  if (hoursElapsed < 36) return false;
 
-  // 1️⃣ Find last logged block
+  // find last logged block
   const { data: lastBlock } = await supabase
     .from("time_blocks")
     .select("end_time")
@@ -33,28 +33,19 @@ async function maybeAutoEndDay(day: any): Promise<boolean> {
     ? new Date(lastBlock.end_time)
     : null;
 
-  // 2️⃣ actualEnd = max(lastLoggedEnd, estimatedSleep, fallback=start)
-  let actualEnd = estimatedSleep ?? null;
+  let actualEnd = estimatedSleep ?? lastLoggedEnd ?? start;
 
-  if (
-    lastLoggedEnd &&
-    (!actualEnd || lastLoggedEnd > actualEnd)
-  ) {
+  if (lastLoggedEnd && estimatedSleep && lastLoggedEnd > estimatedSleep) {
     actualEnd = lastLoggedEnd;
   }
 
-  if (!actualEnd) {
-    actualEnd = start;
-  }
-
-  // 3️⃣ Close via unified lifecycle
   await closeDay({
     dayId: day.id,
     endTime: actualEnd,
     reason: "auto",
   });
 
-  return true;
+  return day.id; // 👈 THIS is the key
 }
 
 
@@ -65,54 +56,63 @@ export function useOpenDay() {
   const [openDay, setOpenDay] = useState<any | null>(null);
   const [openDayChecked, setOpenDayChecked] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [autoClosed, setAutoClosed] = useState(false);
+
+
+  const [justClosedDayId, setJustClosedDayId] = useState<string | null>(null);
 
   const inFlightRef = useRef(false);
   
 
-  const loadOpenDay = useCallback(async () => {
-    if (!userId) {
+ const loadOpenDay = useCallback(async () => {
+  if (!userId) {
+    setOpenDay(null);
+    setOpenDayChecked(true);
+    return;
+  }
+
+  if (inFlightRef.current) return;
+  inFlightRef.current = true;
+
+  setLoading(true);
+  try {
+    const { data } = await supabase
+      .from("days")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("status", "open")
+      .maybeSingle();
+
+    if (!data) {
       setOpenDay(null);
-      setOpenDayChecked(true);
       return;
     }
 
-    if (inFlightRef.current) return;
-    inFlightRef.current = true;
+    // 🔒 AUTO-CLOSE CHECK
+    const closedDayId = await maybeAutoEndDay(data); // 👈 CHANGE
 
-    setLoading(true);
-    try {
-      const { data } = await supabase
-        .from("days")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("status", "open")
-        .maybeSingle();
-
-      if (!data) {
+    if (closedDayId) {
+  setJustClosedDayId(closedDayId);
+  setAutoClosed(true);
   setOpenDay(null);
   return;
 }
 
-// 🔒 AUTO-CLOSE CHECK (36h rule)
-const didAutoEnd = await maybeAutoEndDay(data);
 
-if (didAutoEnd) {
-  // Day was closed — reload to get the new state
-  setOpenDay(null);
-  return;
-}
 
-setOpenDay(data);
+    // still open
+    setOpenDay(data);
 
-    } catch (err) {
-      console.error("Failed to load open day", err);
-      setOpenDay(null);
-    } finally {
-      setOpenDayChecked(true);
-      setLoading(false);
-      inFlightRef.current = false;
-    }
-  }, [userId]);
+  } catch (err) {
+    console.error("Failed to load open day", err);
+    setOpenDay(null);
+  } finally {
+    setOpenDayChecked(true);
+    setLoading(false);
+    inFlightRef.current = false;
+  }
+}, [userId]);
+
 
   useEffect(() => {
     if (authLoading) return;
@@ -127,7 +127,8 @@ setOpenDay(data);
     openDay,
     openDayChecked,
     loading,
-    reloadOpenDay: loadOpenDay, // ✅ works now
+    reloadOpenDay: loadOpenDay, 
+     justClosedDayId, // ✅ works now
   };
 }
 

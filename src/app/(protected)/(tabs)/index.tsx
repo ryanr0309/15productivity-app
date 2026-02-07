@@ -1,5 +1,5 @@
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useScrollToTop } from "@react-navigation/native";
 import { useData } from "../../../providers/DataProvider";
 import { useAuth } from "../../../hooks/useAuth";
@@ -32,6 +32,7 @@ import { Block } from "../../../utils/timeBlocks";
 import { closeDay } from "../../../utils/dayLifecycle";
 import HomeAnalyticsLoading from "../../../components/home/HomeAnalyticsLoading";
 import AnalyticsSummarySheet from "../../../components/home/AnalyticsSummarySheet";
+import { maybeRequestReviewOnce } from "../../../lib/review";
 
 
 
@@ -75,7 +76,8 @@ export default function Home() {
   homeReady,
   markHomeReady,
   insightsCache,
-  fetchInsights
+  fetchInsights,
+  justClosedDayId,
 } = useData();
 
 
@@ -115,7 +117,7 @@ const initial: Block[] =
   const remainingMs = earliestSleepTime ? Math.max(earliestSleepTime.getTime() - now.getTime(), 0) : 0;
   const heroBlock = openDay ? getCurrentBlock(blocks) : null;
   const activeBlock = activeBlockIndex !== null ? blocks[activeBlockIndex] : null;
-  const [dayNumber, setDayNumber] = useState<number | null>(null);
+
   const [summaryDayId, setSummaryDayId] = useState<string | null>(null);
 
 
@@ -139,6 +141,13 @@ const initial: Block[] =
       // no cleanup needed
     }, [])
   );
+
+const dayNumber = useMemo(() => {
+  if (!insightsCache?.days) return null;
+
+  // insightsCache.days = completed days
+  return insightsCache.days.length + 1;
+}, [insightsCache]);
 
 
 
@@ -167,6 +176,8 @@ const loggedPercent =
     ? 0
     : Math.round((totalLogged / totalStarted) * 100);
 
+const wasAutoClosed = !!justClosedDayId;
+const shouldShowCooldown = !!cooldownEnd && !wasAutoClosed;
 
 
 
@@ -194,12 +205,34 @@ useEffect(() => {
   syncToMinute();
 }, []);
 
-
 useEffect(() => {
-  if (openDayChecked) {
-    loadCooldown();
+  if (!justClosedDayId || !userId) return;
+
+  let cancelled = false;
+
+  async function handleAutoCloseSummary() {
+    if (!justClosedDayId || !userId) return;
+    setPostDayState("analyzing");
+
+    // 🔑 WAIT for AI report
+    await waitForDailyReport(supabase, justClosedDayId);
+
+    if (cancelled) return;
+
+    await fetchInsights(userId);
+
+    if (cancelled) return;
+
+    setSummaryDayId(justClosedDayId);
+    setPostDayState("show_summary");
   }
-}, [openDayChecked, loadCooldown]);
+
+  handleAutoCloseSummary();
+
+  return () => {
+    cancelled = true;
+  };
+}, [justClosedDayId, userId]);
 
 
 
@@ -224,22 +257,6 @@ async function handleConfirmSleep(sleepTime: Date) {
 
 
 
-useEffect(() => {
-  async function loadDayNumber() {
-    if (!userId) return;
-
-    const { count, error } = await supabase
-      .from("days")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", userId);
-
-    if (!error && typeof count === "number") {
-      setDayNumber(count);
-    }
-  }
-
-  loadDayNumber();
-}, [userId]);
 
 
 
@@ -559,9 +576,10 @@ if (postDayState === "closing" || postDayState === "analyzing") {
 }
 
 
+
       return (
   <SafeAreaView style={styles.safe}>
-    {cooldownEnd ? (
+    {shouldShowCooldown ? (
       <View style={{ flex: 1 }}>
         <CooldownScreen
           unlockTime={cooldownEnd}
@@ -587,11 +605,23 @@ if (postDayState === "closing" || postDayState === "analyzing") {
     )}
      {/* MODAL */}
 
-      <AnalyticsSummarySheet
+
+  <AnalyticsSummarySheet
   visible={postDayState === "show_summary"}
-  dayId={openDay?.id}
-  onDismiss={() => setPostDayState("cooldown")}
+  dayId={summaryDayId}
+  onDismiss={async () => {
+    setPostDayState("idle");
+    setSummaryDayId(null);
+
+    // 🔑 Ask for review at the peak moment
+    await maybeRequestReviewOnce();
+
+    // refresh derived state
+    loadCooldown();
+    reloadOpenDay();
+  }}
 />
+
 
       {(isMultiSelect || activeBlock) && openDay && (
 

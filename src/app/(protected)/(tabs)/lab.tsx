@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState, useMemo } from "react";
+import React, { useCallback, useRef, useState, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -34,6 +34,8 @@ export default function Lab() {
   const [isEditGoalsOpen, setIsEditGoalsOpen] = useState(false);
   const [isHabitModalOpen, setIsHabitModalOpen] = useState(false);
   const [habitToDelete, setHabitToDelete] = useState<any | null>(null);
+  const [goals, setGoals] = useState<string[]>([]);
+
 
   const {
     habits,
@@ -45,8 +47,14 @@ export default function Lab() {
     updateLabGoals,
   } = useData();
 
-  const goals = labCache?.goals ?? [];
+
   const scrollRef = useRef<ScrollView>(null);
+
+   useEffect(() => {
+  if (labCache?.goals) {
+    setGoals(labCache.goals);
+  }
+}, [labCache?.goals]);
 
   useFocusEffect(
     useCallback(() => {
@@ -55,6 +63,8 @@ export default function Lab() {
       });
     }, [])
   );
+
+
 
   /* ===================== HABIT STATS ===================== */
 

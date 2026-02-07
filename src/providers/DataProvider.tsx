@@ -50,6 +50,7 @@ export type UserSettings = {
   goals: string[] | null;
   updated_at: string;
   notify_morning: boolean;
+  notify_afternoon: boolean;
   notify_night: boolean;
 };
 
@@ -110,6 +111,7 @@ type DataContextType = {
   fetchInsights: (userId: string) => Promise<void>;
   hydrated: boolean;
   hydrate: () => Promise<void>;
+  justClosedDayId: string | null;
 
 };
 
@@ -304,6 +306,7 @@ const invalidateInsights = useCallback(() => {
 
   reconcileNotifications({
     notifyMorning: userSettings.notify_morning ?? false,
+    notifyAfternoon: userSettings.notify_afternoon ?? false,
     notifyNight: userSettings.notify_night ?? false,
   });
 }, [userSettings]);
@@ -689,6 +692,7 @@ useEffect(() => {
     homeReady,
     hydrated,
     hydrate,
+    justClosedDayId: openDayState.justClosedDayId,
   
       }}
     >

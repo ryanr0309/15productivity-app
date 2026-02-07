@@ -200,7 +200,7 @@ function handleDeleteCategoryLocal(categoryId: string) {
       </View>
 
       {/* DESCRIPTION SECTION */}
-      <Text style={styles.sectionTitle}>Task Description</Text>
+      <Text style={styles.sectionTitle}>Task Description (optional)</Text>
 
       <TextInput
   value={description}

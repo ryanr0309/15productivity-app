@@ -4,8 +4,7 @@ import {
   View,
   Text,
   StyleSheet,
-  Pressable,
-  ScrollView,
+  TouchableWithoutFeedback,
 } from "react-native";
 import TimeBreakdownBar from "./TimeBreakdownBar";
 import { colors } from "../../constants/colors";
@@ -17,7 +16,6 @@ type BreakdownItem = {
   minutes: number;
   color: string;
 };
-
 
 type BreakdownPopupProps = {
   visible: boolean;
@@ -36,8 +34,7 @@ export default function BreakdownPopup({
   mode,
   onChangeMode,
 }: BreakdownPopupProps) {
-  const data =
-    mode === "outcome" ? outcomeData : categoryData;
+  const data = mode === "outcome" ? outcomeData : categoryData;
 
   return (
     <Modal
@@ -47,56 +44,58 @@ export default function BreakdownPopup({
       statusBarTranslucent
     >
       {/* BACKDROP */}
-      <Pressable style={styles.overlay} onPress={onClose}>
-        {/* DIALOG */}
-        <Pressable style={styles.card} onPress={() => {}}>
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={styles.overlay} />
+      </TouchableWithoutFeedback>
+
+      {/* CARD */}
+      <View style={styles.center}>
+        <View style={styles.card}>
           <Text style={styles.title}>Time Breakdown</Text>
 
-<ScrollView
-  style={{ maxHeight: 260 }}
-  showsVerticalScrollIndicator={false}
->
-  <TimeBreakdownBar
-    mode={mode}
-    data={data}
-    onChangeMode={onChangeMode}
-  />
-</ScrollView>
+          {/* 🔑 NO ScrollView here */}
+          <TimeBreakdownBar
+            mode={mode}
+            data={data}
+            onChangeMode={onChangeMode}
+          />
 
-
-          <Pressable onPress={onClose} style={styles.close}>
-            <Text style={styles.closeText}>Done</Text>
-          </Pressable>
-        </Pressable>
-      </Pressable>
+          <TouchableWithoutFeedback onPress={onClose}>
+            <View style={styles.close}>
+              <Text style={styles.closeText}>Done</Text>
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </View>
     </Modal>
   );
 }
+
+/* ---------------- STYLES ---------------- */
+
 const styles = StyleSheet.create({
   overlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.55)",
+  },
+
+  center: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 16,
   },
 
-card: {
-  width: "100%",
-  maxWidth: 420,
-  backgroundColor: colors.background,
-  borderRadius: 20,
-  padding: 20,
-  borderWidth: 1,
-  borderColor: colors.border,
-  overflow: "hidden", // ✅ CRITICAL
-},
-chartContainer: {
-  maxHeight: 260,     // 👈 adjust as needed
-  width: "100%",
-},
-
-
+  card: {
+    width: "100%",
+    maxWidth: 420,
+    maxHeight: "80%", // 🔑 REQUIRED FOR SCROLL
+    backgroundColor: colors.background,
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
 
   title: {
     color: colors.textPrimary,

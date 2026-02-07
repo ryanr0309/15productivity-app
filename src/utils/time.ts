@@ -48,6 +48,16 @@ export function formatTime(input: string | Date) {
   });
 }
 
+export function floorTo15Minutes(date: Date): Date {
+  const floored = new Date(date);
+  const minutes = floored.getMinutes();
+  const flooredMinutes = Math.floor(minutes / 15) * 15;
+
+  floored.setMinutes(flooredMinutes, 0, 0); // zero seconds/ms
+  return floored;
+}
+
+
 
 export function getCurrentBlockLabel(day: any) {
   if (!day) return "—";

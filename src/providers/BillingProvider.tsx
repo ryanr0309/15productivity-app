@@ -7,7 +7,12 @@ import React, {
   useState,
   ReactNode,
 } from "react";
-import Purchases, { CustomerInfo, LOG_LEVEL } from "react-native-purchases";
+import Purchases, {
+  CustomerInfo,
+  LOG_LEVEL,
+  INTRO_ELIGIBILITY_STATUS,
+} from "react-native-purchases";
+
 import RevenueCatUI, { PAYWALL_RESULT } from "react-native-purchases-ui";
 import Constants from "expo-constants";
 import { useAuth } from "../hooks/useAuth";
@@ -19,7 +24,7 @@ type BillingContextType = {
 
   // 🔑 Billing states
   isActive: boolean;
-  hasUsedTrial: boolean;
+  hasUsedTrial: boolean | null;
 
   // Actions
   presentPaywall: () => Promise<boolean>;
@@ -35,10 +40,13 @@ export function BillingProvider({ children }: { children: ReactNode }) {
   const [linking, setLinking] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
   const [rcUserId, setRcUserId] = useState<string | null>(null);
+  const [hasUsedTrial, setHasUsedTrial] = useState<boolean | null>(null);
+
 
   const apiKey =
     Constants.expoConfig?.extra?.EXPO_PUBLIC_REVENUECAT_API_KEY ?? "";
 
+    
   /* ---------- INIT ---------- */
   useEffect(() => {
     let cancelled = false;
@@ -109,24 +117,57 @@ export function BillingProvider({ children }: { children: ReactNode }) {
   const loading = initializing || linking;
 
   /* ---------- DERIVED BILLING STATE ---------- */
+const isEligible = (status: number) =>
+  status === INTRO_ELIGIBILITY_STATUS.INTRO_ELIGIBILITY_STATUS_ELIGIBLE;
+
 
   const isActive = useMemo(() => {
     return !!customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];
   }, [customerInfo]);
 
-  const hasUsedTrial = useMemo(() => {
-    const entitlement = customerInfo?.entitlements?.all?.[ENTITLEMENT_ID];
-    if (!entitlement) return false;
 
-    return entitlement.periodType === "TRIAL";
-  }, [customerInfo]);
+ const checkTrialStatus = useCallback(async () => {
+  try {
+    const offerings = await Purchases.getOfferings();
+    const productIds =
+      offerings.current?.availablePackages
+        .map(p => p.product.identifier) ?? [];
+
+    if (productIds.length === 0) return;
+
+    const eligibility =
+      await Purchases.checkTrialOrIntroductoryPriceEligibility(productIds);
+
+    // If ANY product is ineligible → trial already used
+    const usedTrial = Object.values(eligibility).some(
+  e => !isEligible(e.status)
+);
+
+
+
+
+    setHasUsedTrial(usedTrial);
+  } catch (e) {
+    console.warn("checkTrialStatus error", e);
+  }
+}, []);
+
+useEffect(() => {
+  if (!loading) {
+    checkTrialStatus();
+  }
+}, [loading, checkTrialStatus]);
+
 
   /* ---------- ACTIONS ---------- */
+  
 
-  const refreshCustomerInfo = useCallback(async () => {
-    const info = await Purchases.getCustomerInfo();
-    setCustomerInfo(info);
-  }, []);
+const refreshCustomerInfo = useCallback(async () => {
+  const info = await Purchases.getCustomerInfo();
+  setCustomerInfo(info);
+  await checkTrialStatus();
+}, [checkTrialStatus]);
+
 
   const presentPaywall = useCallback(async () => {
     try {
