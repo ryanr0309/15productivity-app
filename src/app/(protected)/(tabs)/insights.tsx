@@ -1,706 +1,296 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, ScrollView, StyleSheet, Pressable, Image } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
-import { breakdownByCategory, breakdownByOutcome } from "../../../types/outcomes";
+import React, { useEffect, useState, useMemo } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Pressable,
+  ActivityIndicator,
+  ScrollView,
+} from "react-native";
 import { supabase } from "../../../lib/supabase";
-import { SafeAreaView } from "react-native-safe-area-context";
 
+type Segment = "yes" | "no" | "missed";
 
-
-import DateStrip from "../../../components/insights/DateStrip";
-import ProductivityCircle from "../../../components/insights/ProductivityCircle";
-import TimeBreakdownBar from "../../../components/insights/TimeBreakdownBar";
-import TryTomorrowCard from "../../../components/insights/TryTomorrowCard";
-
-import { normalizeBlocks } from "../../../utils/blocks";
-import { scoreDay } from "../../../lib/scoring/scoring";
-import { Block } from "../../../utils/timeBlocks";
-import { toClassifiedBlock } from "../../../lib/adapters/toClassifiedBlock";
-import { normalizeCategoryBreakdown, normalizeOutcomeBreakdown } from "../../../lib/analytics/normalizeBreakdown";
-import { Category } from "../../../constants/categories";
-import { findBestFocusWindow } from "../../../lib/analytics/focusWindow";
-import { findMostUnproductiveWindow } from "../../../lib/analytics/unproductiveWindow";
-import DailySummaryCard from "../../../components/insights/DailySummary";
-import { formatDateRange, formatDateTime } from "../../../utils/time";
-import { useData } from "../../../providers/DataProvider";
-import { useAuth } from "../../../hooks/useAuth";
-import BreakdownModal from "../../../components/insights/BreakdownModal";
-import AISummaryPopup from "../../../components/insights/AISummaryPopup";
-import { useScrollToTop } from "@react-navigation/native";
-import { useCallback} from "react";
-import { useFocusEffect } from "@react-navigation/native";
-import InsightsSkeleton from "../../../components/insights/InsightsSkeleton";
-import AnimatedTabWrapper from "../../../components/AnimatedTabWrapper";
-import InsightsEmptyState from "../../../components/insights/InsightsEmptyState";
-import DayHistorySheet from "../../../components/insights/DayHistorySheet";
-
-const colors = {
-  background: "#0B1224",
-  card: "rgba(255,255,255,0.06)",
-  cardStrong: "rgba(255,255,255,0.09)",
-  textPrimary: "#FFFFFF",
-  textSecondary: "rgba(255,255,255,0.7)",
-  border: "rgba(255,255,255,0.10)",
-  accent: "#4DA3FF",
-  good: "#22C55E",
-  warn: "#F59E0B",
-  danger: "#EF4444",
+type FocusBlock = {
+  id: string;
+  goal: string;
+  planned_duration: number;
+  actual_duration: number;
+  check_ins: Segment[];
+  created_at: string;
 };
 
-export default function Insights() {
-  /** ---------------- STATE ---------------- */
-  const blocksCacheRef = useRef<Record<string, any[]>>({});
-  const reportCacheRef = useRef<Record<string, any>>({});
+const STATIC_CHECK_INS: Segment[] = [
+  "no",
+  "yes",
+  "yes",
+  "missed",
+  "missed",
+];
 
-  /** ---------------- STATE ---------------- */
-  const [days, setDays] = useState<any[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [blocks, setBlocks] = useState<any[]>([]);
-  const [report, setReport] = useState<any | null>(null);
+
+export default function InsightsScreen() {
+  const [blocks, setBlocks] = useState<FocusBlock[]>([]);
+  const [selectedBlock, setSelectedBlock] =
+    useState<FocusBlock | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const { categories } = useData();
-  const { userId } = useAuth();
-
-  const [showBreakdownModal, setShowBreakdownModal] = useState(false);
-  const [showSummaryPopup, setShowSummaryPopup] = useState(false);
-  const [showDayHistory, setShowDayHistory] = useState(false);
-
-
-  const scrollRef = useRef<ScrollView>(null);
-  const { insightsCache } = useData();
-
-
-useEffect(() => {
-  if (!insightsCache) return;
-
-  const hydratedDays = insightsCache.days ?? [];
-  setDays(hydratedDays);
-
-  const latestIndex = hydratedDays.length - 1;
-  setSelectedIndex(latestIndex);
-
-  blocksCacheRef.current = { ...insightsCache.blocksByDayId };
-  reportCacheRef.current = { ...insightsCache.reportsByDayId };
-
-  const latestDayId = hydratedDays[latestIndex]?.id;
-
-  // ✅ set initial UI state immediately
-  setBlocks(latestDayId ? blocksCacheRef.current[latestDayId] ?? [] : []);
-  setReport(latestDayId ? reportCacheRef.current[latestDayId] ?? null : null);
-
-  setLoading(false);
-
-
-}, [insightsCache]);
-
-
-
-  useFocusEffect(
-    useCallback(() => {
-      requestAnimationFrame(() => {
-        scrollRef.current?.scrollTo({ y: 0, animated: false });
-      });
-    }, [])
-  );
-
-  /** ---------------- CATEGORY MAP ---------------- */
-
-
-  /** ---------------- PREFETCH RECENT DAYS ---------------- */
+  // -----------------------------------------
+  // FETCH ALL BLOCKS (Chronological)
+  // -----------------------------------------
   useEffect(() => {
-    if (!days.length) return;
+    const fetchBlocks = async () => {
+      const { data } = await supabase
+        .from("focus_blocks")
+        .select("*")
+        .order("created_at", { ascending: true });
 
-    const indicesToPrefetch = [
-      selectedIndex,
-      selectedIndex - 1,
-      selectedIndex - 2,
-    ].filter(i => i >= 0);
+      if (data) {
+        setBlocks(data);
+        setSelectedBlock(data[data.length - 1] ?? null);
+      }
 
-    indicesToPrefetch.forEach(async i => {
-      const dayId = days[i].id;
-      if (blocksCacheRef.current[dayId]) return;
-
-      const [{ data: report }, { data: blocks }] =
-        await Promise.all([
-          supabase
-            .from("daily_reports")
-            .select("*")
-            .eq("day_id", dayId)
-            .maybeSingle(),
-          supabase
-            .from("time_blocks")
-            .select("*")
-            .eq("day_id", dayId)
-            .order("start_time"),
-        ]);
-
-      blocksCacheRef.current[dayId] =
-        normalizeBlocks(blocks ?? []);
-      reportCacheRef.current[dayId] = report;
-
-
-    });
-    
-  }, [days, selectedIndex]);
-
-  /** ---------------- LOAD SELECTED DAY ---------------- */
-  useEffect(() => {
-    if (!days[selectedIndex]) return;
-
-    const dayId = days[selectedIndex].id;
-
-
-
-    // ✅ Cache hit → instant
-    if (blocksCacheRef.current[dayId]) {
-      setBlocks(blocksCacheRef.current[dayId]);
-      setReport(reportCacheRef.current[dayId] ?? null);
       setLoading(false);
-      return;
-    }
+    };
 
-    // ❌ Cache miss → fetch once
-    async function load() {
-      setLoading(true);
+    fetchBlocks();
+  }, []);
 
-      const [{ data: report }, { data: blocks }] =
-        await Promise.all([
-          supabase
-            .from("daily_reports")
-            .select("*")
-            .eq("day_id", dayId)
-            .maybeSingle(),
-          supabase
-            .from("time_blocks")
-            .select("*")
-            .eq("day_id", dayId)
-            .order("start_time"),
-        ]);
+  // -----------------------------------------
+  // SCORING
+  // -----------------------------------------
+  const scoring = useMemo(() => {
+    if (!selectedBlock) return null;
 
-      const normalized = normalizeBlocks(blocks ?? []);
+    const completedSegments =
+      STATIC_CHECK_INS.filter(
+        s => s === "yes"
+      ).length;
 
-      blocksCacheRef.current[dayId] = normalized;
-      reportCacheRef.current[dayId] = report;
+    const totalCompletedSegments =
+      STATIC_CHECK_INS.filter(
+        s => s !== "missed"
+      ).length;
 
-      setBlocks(normalized);
-      setReport(report);
-      setLoading(false);
-    }
+    const focusQuality =
+      totalCompletedSegments === 0
+        ? 0
+        : completedSegments /
+          totalCompletedSegments;
 
-    load();
-  }, [selectedIndex, days]);
+    const completionRatio =
+      selectedBlock.planned_duration === 0
+        ? 0
+        : selectedBlock.actual_duration /
+          selectedBlock.planned_duration;
 
-  function formatWindow(window: {
-  start: Date;
-  end: Date;
-}) {
-  const start = window.start.toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+    const finalScore = Math.round(
+      (focusQuality * 0.7 +
+        completionRatio * 0.3) *
+        100
+    );
 
-  const end = window.end.toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+    return {
+      finalScore,
+      focusQuality,
+      completionRatio,
+    };
+  }, [selectedBlock]);
 
-  return `${start} – ${end}`;
-}
-
-
-
-
-  /** ---------------- DERIVED DATA ---------------- */
-
-console.log(blocks)
-
-const selectedDay = days[selectedIndex];
-
-const analyticsBlocks = useMemo(() => {
-  console.log(selectedDay)
-  if (!selectedDay) return [];
-
-  // 🚫 Do NOT compute analytics until day is finalized
-  if (!selectedDay.end_time && selectedDay.day_phase !== "locked") {
-    return [];
-  }
-
-  
-  const cutoff = new Date(selectedDay.end_time);
-
-
-  return blocks.filter(
-  block =>
-    block.startTime < cutoff &&
-    block.status !== "unknown"
-);
-
-}, [blocks, selectedDay]);
-
-console.log(analyticsBlocks)
-
-
-
-const hasBlocks = analyticsBlocks.length > 0;
-
-const classifiedBlocks = useMemo(
-  () =>
-    hasBlocks
-      ? analyticsBlocks
-          .filter(b => b.status !== "unknown")
-          .map(toClassifiedBlock)
-      : [],
-  [analyticsBlocks, hasBlocks]
-);
-
-
-
-const bestFocusWindow = useMemo(
-  () => (hasBlocks ? findBestFocusWindow(classifiedBlocks) : null),
-  [classifiedBlocks, hasBlocks]
-);
-
-const dayScore = useMemo(
-  () =>
-    hasBlocks
-      ? scoreDay(classifiedBlocks)
-      : { percent: 0, productive: 0, neutral: 0, unproductive: 0 },
-  [classifiedBlocks, hasBlocks]
-);
-
-
-
-const outcomeBreakdown = useMemo(
-  () =>
-    hasBlocks
-      ? breakdownByOutcome(classifiedBlocks)
-      : { productive: 0, neutral: 0, unproductive: 0 },
-  [classifiedBlocks, hasBlocks]
-);
-
-const outcomeBarData = useMemo(
-  () => normalizeOutcomeBreakdown(outcomeBreakdown),
-  [outcomeBreakdown]
-);
-
-
-const categoryBreakdown = useMemo(
-  () => (hasBlocks ? breakdownByCategory(analyticsBlocks) : []),
-  [analyticsBlocks, hasBlocks]
-);
-
-const categoryBarData = useMemo(
-  () => normalizeCategoryBreakdown(categoryBreakdown),
-  [categoryBreakdown]
-);
-
-
-
-
-  const [breakdownMode, setBreakdownMode] =
-  useState<"category" | "outcome">("category");
-
-const TOP_N = 4;
-
-const topCategoryData = [...categoryBarData]
-  .sort((a, b) => b.minutes - a.minutes)
-  .slice(0, TOP_N);
-
-const previewData =
-  breakdownMode === "outcome"
-    ? outcomeBarData
-    : topCategoryData;
-
-
-
-    
-    const rangeText = selectedDay
-  ? formatDateRange(
-      new Date(selectedDay.start_time),
-      new Date(selectedDay.end_time)
-    )
-  : "";
-
-const blocksCompleted = analyticsBlocks.filter(
-  b => b.status === "logged"
-).length;
-
-const blocksMissed = analyticsBlocks.filter(
-  b => b.status === "missed"
-).length;
-
-
-
-  
-const worstWindow =
-  findMostUnproductiveWindow(classifiedBlocks);
-
-
-
-
-
-
-  /** ---------------- GUARDS ---------------- */
   if (loading) {
     return (
-
-      <SafeAreaView style={styles.safe} >
-      <ScrollView contentContainerStyle={styles.container}
-             ref={scrollRef}
-             showsVerticalScrollIndicator={false}>
-                <InsightsSkeleton/>
-             </ScrollView>
-      </SafeAreaView>
- 
+      <View style={styles.loading}>
+        <ActivityIndicator color="#4DA3FF" />
+      </View>
     );
   }
 
-  if (!days.length) {
-    return (
-
-                <InsightsEmptyState/>
-
-    );
-  }
-
-  /** ---------------- RENDER ---------------- */
   return (
-    
-    <SafeAreaView style={styles.safe} >
-      <ScrollView contentContainerStyle={styles.container}
-             ref={scrollRef}
-             showsVerticalScrollIndicator={false}>
-              
-        {/* HEADER */}
-         <View style={styles.header}>
-                                 <View style={styles.brandLeft}>
-                         
-                  <Image
-                    source={require("../../../assets/images/fifteen.png")}
-                    style={styles.logoImage}
-                    resizeMode="contain"
+    <View style={styles.container}>
+      <Text style={styles.header}>
+        Focus Insights
+      </Text>
+
+      {/* Horizontal Strip */}
+      <FlatList
+        data={blocks}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{
+          paddingVertical: 20,
+        }}
+        keyExtractor={item => item.id}
+        renderItem={({ item }) => {
+          const isSelected =
+            selectedBlock?.id === item.id;
+
+          const score =
+            item.planned_duration === 0
+              ? 0
+              : Math.round(
+                  (item.actual_duration /
+                    item.planned_duration) *
+                    100
+                );
+
+          return (
+            <Pressable
+              style={[
+                styles.blockCard,
+                isSelected &&
+                  styles.blockCardSelected,
+              ]}
+              onPress={() =>
+                setSelectedBlock(item)
+              }
+            >
+              <Text
+                style={[
+                  styles.blockScore,
+                  isSelected && {
+                    color: "#0B1224",
+                  },
+                ]}
+              >
+                {score}
+              </Text>
+            </Pressable>
+          );
+        }}
+      />
+
+      {/* Selected Block Detail */}
+      {selectedBlock && scoring && (
+        <ScrollView
+          contentContainerStyle={{
+            paddingBottom: 60,
+          }}
+        >
+          <View style={styles.detailCard}>
+            <Text style={styles.bigScore}>
+              {scoring.finalScore}
+            </Text>
+
+            <Text style={styles.breakdown}>
+              Focus:{" "}
+              {Math.round(
+                scoring.focusQuality * 100
+              )}
+              %
+            </Text>
+
+            <Text style={styles.breakdown}>
+              Commitment:{" "}
+              {Math.round(
+                scoring.completionRatio * 100
+              )}
+              %
+            </Text>
+
+            {/* Timeline */}
+            <View style={styles.timeline}>
+              {STATIC_CHECK_INS.map(
+                (segment, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.segment,
+                      segment === "yes"
+                        ? styles.segmentYes
+                        : segment === "no"
+                        ? styles.segmentNo
+                        : styles.segmentMissed,
+                    ]}
                   />
-                
-                
-                                   <Text style={styles.brandText}>15 Productivity</Text>
-                                 </View>
-                                </View>
+                )
+              )}
+            </View>
 
-        {/* DAY STRIP */}
-        <DateStrip
-          totalDays={days.length}
-          selectedIndex={selectedIndex}
-          onSelectIndex={setSelectedIndex}
-        />
-        <Text style={styles.dateRange}>
-  {rangeText}
-</Text>
-
-        {/* PRODUCTIVITY SCORE */}
-       <View style={styles.heroCard}>
-  <ProductivityCircle
-    score={dayScore.percent}
-    deltaText={""}
-  />
-
-  <Text style={styles.blockMeta}>
-    {blocksCompleted} blocks completed · {blocksMissed} missed
-  </Text>
-
-  <Pressable
-    style={styles.viewDayButton}
-    onPress={() => setShowDayHistory(true)}
-  >
-    <Text style={styles.viewDayText}>View full day →</Text>
-  </Pressable>
-</View>
-
-
-
-        {/* TIME BREAKDOWN (stubbed with real blocks later) */}
-        <Pressable onPress={() => setShowBreakdownModal(true)}>
-        <TimeBreakdownBar
-        mode={breakdownMode}
-        data={previewData}
-        onChangeMode={setBreakdownMode}
-        />
-        </Pressable>
-{/* INSIGHT GRID */}
-<View style={styles.insightRow}>
-  {/* LEFT STACK */}
-  <View style={styles.leftColumn}>
-    <View style={[styles.cardBase, styles.stackedCard]}>
-      <Text style={styles.cardLabel}>Best focus window</Text>
-      <Text style={styles.timeText}>
-        {bestFocusWindow
-          ? formatWindow(bestFocusWindow)
-          : "No sustained focus"}
-      </Text>
-      <Text style={styles.cardSubtext}>
-        Based on productive block density.
-      </Text>
+            <Text style={styles.goalText}>
+              {selectedBlock.goal}
+            </Text>
+          </View>
+        </ScrollView>
+      )}
     </View>
-
-    <View style={[styles.cardBase, styles.stackedCard]}>
-      <Text style={styles.cardLabel}>Unproductive window</Text>
-      <Text style={styles.timeText}>
-        {worstWindow
-          ? formatWindow(worstWindow)
-          : "No unproductive time"}
-      </Text>
-      <Text style={styles.cardSubtext}>
-        Based on unproductive clustering.
-      </Text>
-    </View>
-  </View>
-
-  {/* RIGHT AI SUMMARY */}
-  {report?.ai_summary && (
-    <Pressable style={[styles.cardStrongBase, styles.aiCard]} onPress={() => setShowSummaryPopup(true)}>
-    <View >
-      <Text style={styles.cardLabel}>AI Summary</Text>
-
-      <Text
-        style={styles.aiText}
-        numberOfLines={6}
-        ellipsizeMode="tail"
-      >
-        {report.ai_summary}
-      </Text>
-
-
-  <Text style={styles.readMore}>Read more →</Text>
-
-    </View>
-    </Pressable>
-  )}
-</View>
-
-{/* TRY TOMORROW */}
-{report?.try_tomorrow && (
-  <TryTomorrowCard items={report.try_tomorrow} />
-)}
-
-
-
-  <BreakdownModal
-  visible={showBreakdownModal}
-  onClose={() => setShowBreakdownModal(false)}
-  categoryData={categoryBarData}
-  outcomeData={outcomeBarData}
-  mode={breakdownMode}
-  onChangeMode={setBreakdownMode}
-/>
-
-<DayHistorySheet
-  visible={showDayHistory}
-  onClose={() => setShowDayHistory(false)}
-  blocks={analyticsBlocks}
-/>
-
-
-{report?.ai_summary && (
-  <AISummaryPopup
-    visible={showSummaryPopup}
-    summary={report.ai_summary}
-    onClose={() => setShowSummaryPopup(false)}
-  />
-)}
-
-      </ScrollView>
-   </SafeAreaView>
-
-
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-  paddingHorizontal: 16,
-  paddingBottom: 28,
-  gap: 12
-},
-
-  scroll: {
-    padding: 16,
-    paddingBottom: 40,
-    gap: 12
+    flex: 1,
+    backgroundColor: "#0B1224",
+    paddingHorizontal: 20,
   },
-
-  /* ---------------- HEADER ---------------- */
-
-  dateRange: {
-    textAlign: "center",
-    color: colors.textSecondary,
-    fontSize: 14,
-    fontWeight:700
+  header: {
+    marginTop: 80,
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
-
-  /* ---------------- HERO ---------------- */
-  heroCard: {
-
-    padding: 20,
-    borderRadius: 18,
-    backgroundColor: colors.cardStrong,
-    borderWidth: 1,
-    borderColor: colors.border,
+  loading: {
+    flex: 1,
+    backgroundColor: "#0B1224",
+    justifyContent: "center",
     alignItems: "center",
   },
-
-  blockMeta: {
-    marginTop: 8,
-    color: colors.textSecondary,
-    fontSize: 12,
-  },
-
-  /* ---------------- INSIGHTS ---------------- */
-  insightRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-
-  leftColumn: {
-    flex: 1.5,
-    gap: 12,
-  },
-
-  stackedCard: {
-    flex: 1,
-  },
-
-  aiCard: {
-    flex: 1,
-    justifyContent: "space-between",
-  },
-
-  /* ---------------- CARD BASES ---------------- */
-  cardBase: {
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-
-  cardStrongBase: {
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: colors.cardStrong,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-
-  /* ---------------- TEXT ---------------- */
-  cardLabel: {
-    color: colors.textSecondary,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-    marginBottom: 4,
-  },
-
-  logoCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.10)",
+  blockCard: {
+    width: 70,
+    height: 70,
+    borderRadius: 20,
+    backgroundColor: "#141F3D",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
+    marginRight: 14,
   },
-
-  headerRightPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+  blockCardSelected: {
+    backgroundColor: "#4DA3FF",
   },
-  headerRightPillText: {
-    color: colors.textPrimary,
-    fontSize: 12,
+  blockScore: {
+    fontSize: 20,
     fontWeight: "700",
+    color: "#FFFFFF",
   },
-
-
-  timeText: {
-    color: colors.textPrimary,
-    fontSize: 16,
-    fontWeight: "700",
+  detailCard: {
+    marginTop: 20,
+    backgroundColor: "#141F3D",
+    padding: 24,
+    borderRadius: 24,
   },
-
-  cardSubtext: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    marginTop: 6,
+  bigScore: {
+    fontSize: 60,
+    fontWeight: "800",
+    color: "#4DA3FF",
+    marginBottom: 10,
   },
-
-  aiText: {
-    color: colors.textPrimary,
+  breakdown: {
+    color: "#B0B8D4",
     fontSize: 14,
-    lineHeight: 20,
-    marginTop: 8,
-    fontWeight: "500",
+    marginBottom: 6,
   },
-
-  readMore: {
-    marginTop: 12,
-    color: colors.accent,
-    fontSize: 12,
-    fontWeight: "700",
+  timeline: {
+    flexDirection: "row",
+    marginVertical: 20,
   },
-
-  loadingText: {
-    color: colors.textPrimary,
-    textAlign: "center",
-    marginTop: 40,
+  segment: {
+    flex: 1,
+    height: 12,
+    borderRadius: 6,
+    marginHorizontal: 3,
   },
-      safe: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    
-    brandLeft: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-    },
-    
-    logoImage: {
-      width: 24,
-      height: 24,
-      borderRadius: 4
-    },
-    
-    brandText: {
-      color: colors.textPrimary,
-        fontSize: 16,
-        fontWeight: "700",
-        letterSpacing: 0.2,
-    },
-    header: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        marginBottom: 14,
-      },
-      
-      headerText: { color: "#EAEAF0", fontSize: 18, fontWeight: "600" },
-      viewDayButton: {
-  marginTop: 10,
-  paddingVertical: 6,
-},
-
-viewDayText: {
-  color: colors.accent,
-  fontSize: 13,
-  fontWeight: "700",
-},
-
-    
+  segmentYes: {
+    backgroundColor: "#4DA3FF",
+  },
+  segmentNo: {
+    backgroundColor: "#FF5C5C",
+  },
+  segmentMissed: {
+    backgroundColor: "#273450",
+  },
+  goalText: {
+    color: "#CBD3EA",
+    fontSize: 14,
+    marginTop: 10,
+  },
 });

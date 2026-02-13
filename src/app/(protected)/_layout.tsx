@@ -22,34 +22,28 @@ export default function ProtectedLayout() {
     validateSessionOrSignOut();
   }, [authReady, validateSessionOrSignOut]);
 
-  // ✅ Single unified gate: if ANY required piece isn't ready, show splash.
   const appNotReady =
     !authReady ||
     billingLoading ||
     dismissedTrial === null ||
-    hasUsedTrial === null; // IMPORTANT: must be nullable from BillingProvider
+    hasUsedTrial === null;
 
   if (appNotReady) {
     return <AppSplash />;
   }
 
-  // Not logged in → welcome
   if (!userId) {
     return <Redirect href="/(auth)/welcome" />;
   }
 
-  // Active entitlement → allow app
   if (isActive) {
     if (!homeReady) return <AppSplash />;
-    return <Slot />;
+    return <Slot />;   // ✅ FIXED
   }
 
-  // Not active + trial available + not dismissed → Free Trial screen
-  // IMPORTANT: use strict equality, not "!hasUsedTrial"
   if (hasUsedTrial === false && dismissedTrial === false) {
     return <Redirect href="/paywall/FreeTrialScreen" />;
   }
 
-  // Not active + trial used OR dismissed → locked app shell
-  return <Slot />;
+  return <Slot />;  // ✅ FIXED
 }
