@@ -20,12 +20,13 @@ export default {
     },
 
     ios: {
-      bundleIdentifier: 'com.ryan.fifteen',   // MUST match Google Cloud iOS OAuth bundle
-      usesAppleSignIn: true,
-      infoPlist: {
-        ITSAppUsesNonExemptEncryption: false,
-      },
-    },
+  bundleIdentifier: 'com.ryan.fifteen',
+  usesAppleSignIn: true,
+  infoPlist: {
+    ITSAppUsesNonExemptEncryption: false,
+  }
+},
+
 
     android: {
       package: 'com.ryan.fifteen',
@@ -34,6 +35,7 @@ export default {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#ffffff',
       },
+      
     },
 
     web: {
@@ -53,10 +55,12 @@ export default {
     },
 
     plugins: [
-      'expo-router',
-      'expo-font',
-      'expo-web-browser',
-      'expo-apple-authentication',
-    ],
+  'expo-router',
+  'expo-font',
+  'expo-web-browser',
+  'expo-apple-authentication',
+  './plugins/withScreenTime'
+],
+
   },
 };

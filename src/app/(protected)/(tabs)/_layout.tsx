@@ -2,65 +2,79 @@
 
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect } from "react";
-import { colors } from "../../../constants/colors";
-import { useData } from "../../../providers/DataProvider";
-import { ActivityIndicator, View } from "react-native";
-import { AppSplash } from "../../../components/home/AppSplash";
-import { useBilling } from "../../../providers/BillingProvider";
-import { PaywallGate } from "../../../components/PaywallGate";
+import { BlurView } from "expo-blur";
+import React from "react";
+import { Platform, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { COLORS } from "../../../theme";
 
-export default function TabsLayout() {
-  const { hydrated, hydrate } = useData();
+// ─── Export so screens can consume it for paddingBottom ──────────────────────
+export const TAB_BAR_HEIGHT = 72;
 
-
-
-   useEffect(() => {
-    hydrate();
-  }, []);
-
-
-
-  if (!hydrated) {
-    return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <AppSplash />
-      </View>
-    );
-  }
+// ─── Frosted glass background rendered as tabBarBackground ───────────────────
+function TabBarBackground() {
   return (
     <>
+      <View
+       
+        style={StyleSheet.absoluteFill}
+      />
+      {/* Warm ember tint */}
+      <View style={styles.tint} />
+      {/* Subtle border ring */}
+      <View style={styles.border} />
+    </>
+  );
+}
+
+export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
+
+  return (
     <Tabs
       screenOptions={{
         headerShown: false,
         freezeOnBlur: true,
         lazy: false,
 
+        // ── The two magic lines ──────────────────────────────────────────────
         tabBarStyle: {
-          backgroundColor: colors.background,
+          position: "absolute",          // ← floats over content, doesn't push
+          bottom: insets.bottom + 10,    // ← sits above home indicator
+          left: 16,
+          right: 16,
+          height: TAB_BAR_HEIGHT,
+          borderRadius: 32,
           borderTopWidth: 0,
           elevation: 0,
-          height: 82,
-          paddingBottom: 10,
-          paddingTop: 8,
+          backgroundColor: "transparent",
+          overflow: "hidden",            // ← clips blur to rounded corners
+          // Glow shadow
+          shadowColor: COLORS.orange,
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.22,
+          shadowRadius: 18,
         },
+
+        // Render the frosted blur as the background
+        tabBarBackground: () => <TabBarBackground />,
 
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: "600",
-          marginTop: 4,
+          marginTop: 2,
         },
 
         tabBarItemStyle: {
           justifyContent: "center",
           alignItems: "center",
           borderRadius: 18,
-          marginHorizontal: 6,
+          marginHorizontal: 4,
         },
 
         tabBarActiveBackgroundColor: "rgba(255,255,255,0.08)",
         tabBarActiveTintColor: "#FFFFFF",
-        tabBarInactiveTintColor: "rgba(255,255,255,0.45)",
+        tabBarInactiveTintColor: "rgba(255,255,255,0.38)",
       }}
     >
       {/* HOME */}
@@ -102,7 +116,7 @@ export default function TabsLayout() {
             <Ionicons
               name={focused ? "sparkles" : "sparkles-outline"}
               size={focused ? 30 : 28}
-              color={focused ? "#FFFFFF" : colors.textSecondary}
+              color={focused ? "#FFFFFF" : "yellow"}
             />
           ),
         }}
@@ -123,7 +137,18 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
-    <PaywallGate />
-    </>
   );
 }
+
+const styles = StyleSheet.create({
+  tint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(18, 10, 4, 0.70)",
+  },
+  border: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.09)",
+  },
+});
