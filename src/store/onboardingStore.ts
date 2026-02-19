@@ -1,27 +1,27 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 
-const KEY = 'ember_onboarding_complete';
-const SELECTION_KEY = 'ember_screen_time_selection_id';
+const KEY                  = 'ember_onboarding_complete';
+const SELECTION_KEY        = 'ember_screen_time_selection_id';
+const SCREEN_TIME_SEEN_KEY = 'ember_screen_time_seen';
 
 interface OnboardingState {
-  // User answers collected across screens
-  focusStealer:          string | null;   // screen 3
-  focusWindow:           string | null;   // screen 4
-  protectTime:           string | null;   // screen 5
-  dailyPhoneHours:       number | null;   // screen 6
+  focusStealer:          string | null;
+  focusWindow:           string | null;
+  protectTime:           string | null;
+  dailyPhoneHours:       number | null;
   age:                   number | null;
-  screenTimeSelectionId: string | null;   // screen 15 — persisted separately
+  screenTimeSelectionId: string | null;
 
-  // Completion flag
-  isComplete: boolean;
+  isComplete:              boolean;
+  hasSeenScreenTimePrompt: boolean;
 
-  // Actions
-  setAnswer:                (field: keyof OnboardingAnswers, value: string | number) => void;
-  setScreenTimeSelectionId: (id: string | null) => Promise<void>;
-  loadScreenTimeSelectionId: () => Promise<void>;
-  completeOnboarding:       () => Promise<void>;
-  checkComplete:            () => Promise<boolean>;
+  setAnswer:                  (field: keyof OnboardingAnswers, value: string | number) => void;
+  setScreenTimeSelectionId:   (id: string | null) => Promise<void>;
+  loadScreenTimeSelectionId:  () => Promise<void>;
+  setHasSeenScreenTimePrompt: () => Promise<void>;
+  completeOnboarding:         () => Promise<void>;
+  checkComplete:              () => Promise<boolean>;
 }
 
 type OnboardingAnswers = Pick<
@@ -30,20 +30,17 @@ type OnboardingAnswers = Pick<
 >;
 
 export const useOnboardingStore = create<OnboardingState>((set) => ({
-  focusStealer:          null,
-  focusWindow:           null,
-  protectTime:           null,
-  dailyPhoneHours:       null,
-  age:                   null,
-  screenTimeSelectionId: null,
-  isComplete:            false,
+  focusStealer:            null,
+  focusWindow:             null,
+  protectTime:             null,
+  dailyPhoneHours:         null,
+  age:                     null,
+  screenTimeSelectionId:   null,
+  isComplete:              false,
+  hasSeenScreenTimePrompt: false,
 
-  // Generic setter for quiz answers
   setAnswer: (field, value) => set({ [field]: value }),
 
-  // ── Screen Time selection ─────────────────────────────────────────────
-  // Persisted to AsyncStorage separately from onboarding completion so it
-  // survives app restarts — the session screen needs it every time.
   setScreenTimeSelectionId: async (id) => {
     if (id) {
       await AsyncStorage.setItem(SELECTION_KEY, id);
@@ -53,17 +50,22 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
     set({ screenTimeSelectionId: id });
   },
 
-  // Call once on app start (e.g. in _layout.tsx) to rehydrate the selection
   loadScreenTimeSelectionId: async () => {
     try {
       const id = await AsyncStorage.getItem(SELECTION_KEY);
       set({ screenTimeSelectionId: id ?? null });
     } catch {
-      // non-fatal — blocking just won't be active until user re-selects
+      // non-fatal
     }
   },
 
-  // ── Onboarding completion ─────────────────────────────────────────────
+  // Call on both Confirm AND Skip in screen-time.tsx so the user is never
+  // re-prompted on next launch regardless of which path they took.
+  setHasSeenScreenTimePrompt: async () => {
+    await AsyncStorage.setItem(SCREEN_TIME_SEEN_KEY, 'true');
+    set({ hasSeenScreenTimePrompt: true });
+  },
+
   completeOnboarding: async () => {
     await AsyncStorage.setItem(KEY, 'true');
     set({ isComplete: true });
@@ -77,10 +79,22 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   },
 }));
 
+// ── Standalone async helpers for _layout.tsx boot ────────────────────────────
+// Read AsyncStorage directly so the root layout can check both flags in
+// parallel before the Zustand store has hydrated, preventing a flash of the
+// wrong screen on cold start.
+
 export async function hasCompletedOnboarding(): Promise<boolean> {
   try {
-    const val = await AsyncStorage.getItem(KEY);
-    return val === 'true';
+    return (await AsyncStorage.getItem(KEY)) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export async function hasSeenScreenTimePrompt(): Promise<boolean> {
+  try {
+    return (await AsyncStorage.getItem(SCREEN_TIME_SEEN_KEY)) === 'true';
   } catch {
     return false;
   }

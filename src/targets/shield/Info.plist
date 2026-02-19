@@ -1,14 +1,29 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>NSExtension</key>
     <dict>
+        <key>NSExtensionAttributes</key>
+        <dict>
+            <key>EXAppExtensionAttributes</key>
+            <array>
+                <dict>
+                    <key>EXExtensionPointIdentifier</key>
+                    <string>com.apple.managed-settings.shield.configuration</string>
+                    <key>EXPrincipalClass</key>
+                    <string>$(PRODUCT_MODULE_NAME).ShieldConfigurationExtension</string>
+                </dict>
+                <dict>
+                    <key>EXExtensionPointIdentifier</key>
+                    <string>com.apple.managed-settings.shield.actions</string>
+                    <key>EXPrincipalClass</key>
+                    <string>$(PRODUCT_MODULE_NAME).ShieldActionExtension</string>
+                </dict>
+            </array>
+        </dict>
         <key>NSExtensionPointIdentifier</key>
         <string>com.apple.managed-settings.shield.configuration</string>
-        <key>NSExtensionPrincipalClass</key>
-        <string>$(PRODUCT_MODULE_NAME).ShieldConfigurationExtension</string>
     </dict>
 </dict>
 </plist>

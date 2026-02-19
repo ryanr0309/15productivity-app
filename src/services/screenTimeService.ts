@@ -1,16 +1,5 @@
 /**
  * services/screenTimeService.ts
- *
- * Written against the actual library source (index.ts + types).
- *
- * Key facts from the source:
- *   - getAuthorizationStatus()  → synchronous, returns AuthorizationStatusType
- *   - requestAuthorization()    → async, takes "individual" | "child"
- *   - pollAuthorizationStatus() → async, takes { abortController?, pollIntervalMs?, maxAttempts? }
- *   - stopMonitoring()          → takes activityNames?: string[]  (optional array)
- *   - DeviceActivityEvent.familyActivitySelection → FamilyActivitySelection (typed object)
- *   - blockSelection()          → direct imperative block, no scheduling needed
- *   - configureActions()        → callbackName must be CallbackName union type
  */
 
 import * as RNDeviceActivity from 'react-native-device-activity';
@@ -24,31 +13,24 @@ import {
   type CallbackName,
 } from 'react-native-device-activity';
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-
 const MONITOR_NAME = 'ember_focus_session';
 const SELECTION_ID = 'ember_block_selection';
-const BLUR_DARK    = 4; // UIBlurEffectStyle.systemMaterialDark
-
-// ── Auth status ───────────────────────────────────────────────────────────────
+const BLUR_DARK    = 4;
 
 type AuthStatus = 'approved' | 'denied' | 'notDetermined';
 
 function normaliseStatus(raw: AuthorizationStatusType): AuthStatus {
-  if (raw === AuthorizationStatus.approved)      return 'approved';
-  if (raw === AuthorizationStatus.denied)        return 'denied';
+  if (raw === AuthorizationStatus.approved) return 'approved';
+  if (raw === AuthorizationStatus.denied)   return 'denied';
   return 'notDetermined';
 }
-
-// ── 1. Permission ─────────────────────────────────────────────────────────────
 
 export async function requestScreenTimeAuthorization(): Promise<AuthStatus> {
   try {
     await RNDeviceActivity.requestAuthorization('individual');
-    // Poll with maxAttempts + pollIntervalMs (correct params from source)
     const raw = await RNDeviceActivity.pollAuthorizationStatus({
       pollIntervalMs: 300,
-      maxAttempts:    15,   // 15 × 300ms = 4.5s max wait
+      maxAttempts:    15,
     });
     return normaliseStatus(raw);
   } catch {
@@ -56,21 +38,10 @@ export async function requestScreenTimeAuthorization(): Promise<AuthStatus> {
   }
 }
 
-// getAuthorizationStatus is synchronous in the source
 export function getAuthorizationStatus(): AuthStatus {
   return normaliseStatus(RNDeviceActivity.getAuthorizationStatus());
 }
 
-// ── 2. Save selection token ───────────────────────────────────────────────────
-
-/**
- * Persist the raw token string from DeviceActivitySelectionView under a
- * stable ID. Call from onSelectionChange:
- *
- *   onSelectionChange={(e) =>
- *     saveSelectionToken(e.nativeEvent.familyActivitySelection)
- *   }
- */
 export function saveSelectionToken(familyActivitySelection: string): string {
   RNDeviceActivity.setFamilyActivitySelectionId({
     id: SELECTION_ID,
@@ -79,19 +50,22 @@ export function saveSelectionToken(familyActivitySelection: string): string {
   return SELECTION_ID;
 }
 
-// ── 3. Blocking ───────────────────────────────────────────────────────────────
+export function hasStoredSelection(): boolean {
+  return !!RNDeviceActivity.getFamilyActivitySelectionId(SELECTION_ID);
+}
 
-/**
- * Start blocking immediately using blockSelection() — the direct imperative
- * API. Also starts a DeviceActivity monitor so blocking re-applies if the
- * phone restarts or the monitor process is killed.
- */
-export async function startBlocking(durationSec: number): Promise<void> {
-  // ── Configure shield UI ──
+export async function startBlocking(durationSec: number, goal?: string): Promise<boolean> {
+  if (!hasStoredSelection()) return false;
+
+  
+  if (goal) {
+    RNDeviceActivity.userDefaultsSet('ember_session_goal', goal);
+  }
+
   const shieldConfig: ShieldConfiguration = {
-    title:                        'Focus Session Active 🔥',
-    subtitle:                     'This app is blocked during your focus block.',
-    primaryButtonLabel:           'I need it (1 min)',
+    title:                        'This app is blocked\nduring your session',
+    subtitle:                     'Your focus session is active in Ember 🔥',
+    primaryButtonLabel:           'Go to Ember',
     secondaryButtonLabel:         'Go back',
     primaryButtonBackgroundColor: { red: 255, green: 107, blue: 26 },
     primaryButtonLabelColor:      { red: 255, green: 255, blue: 255 },
@@ -99,25 +73,20 @@ export async function startBlocking(durationSec: number): Promise<void> {
     backgroundBlurStyle:          BLUR_DARK,
   };
 
+  // disableBlockAllMode temporarily lifts the block when user taps primary.
+  // This lets them switch to Ember where the session screen is open.
+  // openApp is a native ShieldActionType and does not work via updateShield().
   const shieldActions: ShieldActions = {
-    primary:   { type: 'disableBlockAllMode', behavior: 'defer' },
+    primary:   { type: 'openApp',             behavior: 'close' },
     secondary: { type: 'dismiss',             behavior: 'close' },
   };
 
+  console.log('[Ember] updateShield firing with openApp action');
   RNDeviceActivity.updateShield(shieldConfig, shieldActions);
 
-  // ── Apply blocking immediately via imperative API ──
-  // Retrieve the stored token by ID and block it
-  const storedToken = RNDeviceActivity.getFamilyActivitySelectionId(SELECTION_ID);
-  if (storedToken) {
-    RNDeviceActivity.blockSelection({ activitySelectionId: SELECTION_ID });
-  }
+  RNDeviceActivity.blockSelection({ activitySelectionId: SELECTION_ID });
 
-  // ── Also set up a DeviceActivity monitor for persistence ──
-  // callbackName must be a valid CallbackName — 'intervalDidStart' fires
-  // at the start of the interval, which is when we want blocking applied.
   const callbackName: CallbackName = 'intervalDidStart';
-
   RNDeviceActivity.configureActions({
     activityName: MONITOR_NAME,
     callbackName,
@@ -133,47 +102,38 @@ export async function startBlocking(durationSec: number): Promise<void> {
   const endT = new Date(now.getTime() + durationSec * 1000);
 
   const schedule: DeviceActivitySchedule = {
-    intervalStart: {
-      hour:   now.getHours(),
-      minute: now.getMinutes(),
-      second: now.getSeconds(),
-    },
-    intervalEnd: {
-      hour:   endT.getHours(),
-      minute: endT.getMinutes(),
-      second: endT.getSeconds(),
-    },
+    intervalStart: { hour: now.getHours(),  minute: now.getMinutes(),  second: now.getSeconds() },
+    intervalEnd:   { hour: endT.getHours(), minute: endT.getMinutes(), second: endT.getSeconds() },
     repeats: false,
   };
 
-  // DeviceActivityEvent.familyActivitySelection is FamilyActivitySelection
-  // (an opaque token object). We get it via getFamilyActivitySelectionId.
   const selection = RNDeviceActivity.getFamilyActivitySelectionId(SELECTION_ID);
-
   if (selection) {
-    await RNDeviceActivity.startMonitoring(
-      MONITOR_NAME,
-      schedule,
-      [
-        {
-          eventName:               'session_active',
-          familyActivitySelection: selection as unknown as FamilyActivitySelection,
-          threshold:               { second: 1 },
-        },
-      ]
-    );
+    try {
+      await RNDeviceActivity.startMonitoring(
+        MONITOR_NAME,
+        schedule,
+        [
+          {
+            eventName:               'session_end_marker',
+            familyActivitySelection: selection as unknown as FamilyActivitySelection,
+            threshold:               { hour: 23 },
+          },
+        ]
+      );
+    } catch (e) {
+      console.warn('[Ember] startMonitoring error (non-fatal):', e);
+    }
   }
+
+  return true;
 }
 
-/**
- * Stop blocking immediately.
- * stopMonitoring takes string[] (optional), resetBlocks clears ManagedSettings.
- */
 export async function stopBlocking(): Promise<void> {
-  RNDeviceActivity.stopMonitoring([MONITOR_NAME]);
   RNDeviceActivity.resetBlocks();
+  RNDeviceActivity.stopMonitoring([MONITOR_NAME]);
+  RNDeviceActivity.userDefaultsClearWithPrefix(`actions_for_${MONITOR_NAME}`);
 
-  // Clear shield
   RNDeviceActivity.updateShield(
     { title: '' },
     {
@@ -183,9 +143,6 @@ export async function stopBlocking(): Promise<void> {
   );
 }
 
-/**
- * Pause blocking during a checkpoint break, then auto-resume.
- */
 export async function pauseBlockingForBreak(
   breakDurationSec:  number,
   remainingFocusSec: number

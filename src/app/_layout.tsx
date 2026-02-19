@@ -8,12 +8,12 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Linking, AppState } from 'react-native';
 import { SplashScreen, Stack, router, useRouter } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { rehydrateSession } from '../store/sessionStore';
+import { rehydrateSession, useSessionStore } from '../store/sessionStore';
 import React from 'react';
-import { hasCompletedOnboarding, useOnboardingStore } from '../store/onboardingStore';
+import { hasCompletedOnboarding, hasSeenScreenTimePrompt, useOnboardingStore } from '../store/onboardingStore';
 import Purchases from 'react-native-purchases';
 
 
@@ -23,17 +23,40 @@ export default function RootLayout() {
   const [ready, setReady] = useState(false);
 
   const { loadScreenTimeSelectionId } = useOnboardingStore();
+
+ useEffect(() => {
+     const isRunning = useSessionStore.getState().isRunning;
+  console.log('[Ember] AppState active, isRunning:', isRunning);
+  console.log('[Ember] attempting router.replace /session');
+  if (isRunning) {
+    router.replace('/session');
+    console.log('[Ember] router.replace called');
+  }
+  }, []);
+
+  
 useEffect(() => { loadScreenTimeSelectionId(); }, []);
+
 
   useEffect(() => {
     async function bootstrap() {
       // 1. Check onboarding
       Purchases.configure({ apiKey: 'appl_oAPrSJxAenzObkBRjVsJJlnudRM' });
-      const onboarded = await hasCompletedOnboarding();
+      const [onboarded, seenScreenTime] = await Promise.all([
+  hasCompletedOnboarding(),
+  hasSeenScreenTimePrompt(),
+]);
 
       if (!onboarded) {
         // First-time user → onboarding
         router.replace('/(onboarding)');
+        setReady(true);
+        return;
+      }
+
+      if (!seenScreenTime) {
+        // User has completed onboarding but hasn't seen screen time prompt yet
+        router.replace('/(onboarding)/screentime');
         setReady(true);
         return;
       }

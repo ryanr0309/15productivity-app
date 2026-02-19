@@ -1,90 +1,68 @@
 // targets/shield/ShieldConfigurationExtension.swift
 //
-// This is the UI shown when a blocked app is opened.
-// It runs in a SEPARATE PROCESS from your React Native app —
-// no RN APIs available here, pure Swift/SwiftUI only.
+// Shield shown when user opens a blocked app during a focus session.
 //
-// react-native-device-activity writes shield config into the shared
-// App Group UserDefaults from JS. This extension reads those values.
+// Primary button → opens Ember (lands on session screen which is already open)
+// Secondary button → "Go back" dismisses the shield
+//
+// NOTE: 'openApp' requires a URL scheme registered in app.config.js:
+//   ios: { infoPlist: { CFBundleURLTypes: [{ CFBundleURLSchemes: ['ember'] }] } }
 
 import ManagedSettings
 import ManagedSettingsUI
 import UIKit
 
-// The system calls this class to get the shield configuration.
-// Override the methods for the type(s) of content you're shielding.
 class ShieldConfigurationExtension: ShieldConfigurationDataSource {
 
-    // Shared UserDefaults — same App Group as in app.config.js
-    private let defaults = UserDefaults(
-        suiteName: "group.com.ryan.fifteen"  // ← match your APP_GROUP
-    )
-
-    // ── Called when shielding a specific application ──────────────────────
     override func configuration(
         shieldingApplication application: Application
     ) -> ShieldConfiguration {
         return emberShield()
     }
 
-    // ── Called when shielding an app category ─────────────────────────────
     override func configuration(
         shieldingApplicationCategory category: ActivityCategory
     ) -> ShieldConfiguration {
         return emberShield()
     }
 
-    // ── Called when shielding a website ───────────────────────────────────
     override func configuration(
         shieldingWebDomain domain: WebDomain
     ) -> ShieldConfiguration {
         return emberShield()
     }
 
-    // ── Build the shield UI ───────────────────────────────────────────────
-    // react-native-device-activity writes shield title/subtitle into
-    // UserDefaults so you can update it from JS without a new build.
     private func emberShield() -> ShieldConfiguration {
-
-        // Read dynamic values written by ReactNativeDeviceActivity.updateShield()
-        // Falls back to sensible defaults if nothing has been written yet.
-        let title    = defaults?.string(forKey: "ember_shield_title")
-                     ?? "Focus Session Active 🔥"
-        let subtitle = defaults?.string(forKey: "ember_shield_subtitle")
-                     ?? "This app is blocked during your focus block."
-
         return ShieldConfiguration(
-            // ── Background ──
-            backgroundBlurStyle: .systemMaterialDark,
+            backgroundBlurStyle: .systemUltraThinMaterialDark,
 
-            // ── Icon: app's own icon shows by default, or override: ──
-            // icon: UIImage(named: "EmberShieldIcon"),
+            // ── Mascot placeholder ──
+            // Uncomment once EmberMascotSad.png is added to the extension target:
+            // icon: UIImage(named: "EmberMascotSad"),
 
-            // ── Title ──
             title: ShieldConfiguration.Label(
-                value: title,
-                color: .white
+                value: "This app is blocked\nduring your session",
+                color: UIColor(red: 1.0, green: 0.30, blue: 0.20, alpha: 1.0) // #FF4D33
             ),
 
-            // ── Subtitle ──
             subtitle: ShieldConfiguration.Label(
-                value: subtitle,
-                color: UIColor(white: 1.0, alpha: 0.65)
+                value: "Your focus session is active in Ember 🔥",
+                color: UIColor(white: 1.0, alpha: 0.55)
             ),
 
-            // ── Primary button: "I need it" — defers shield briefly ──
+            // Primary: opens Ember — session screen will already be visible
             primaryButtonLabel: ShieldConfiguration.Label(
-                value: "I need it (1 min)",
+                value: "Go to Ember",
                 color: .white
             ),
             primaryButtonBackgroundColor: UIColor(
-                red: 1.0, green: 0.42, blue: 0.10, alpha: 1.0   // #FF6B1A
+                red: 1.0, green: 0.42, blue: 0.10, alpha: 1.0  // #FF6B1A
             ),
 
-            // ── Secondary button: just closes the shield ──
+            // Secondary: dismisses shield, returns user to blocked app screen
             secondaryButtonLabel: ShieldConfiguration.Label(
                 value: "Go back",
-                color: UIColor(white: 1.0, alpha: 0.55)
+                color: UIColor(white: 1.0, alpha: 0.45)
             )
         )
     }

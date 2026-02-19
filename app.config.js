@@ -20,6 +20,8 @@ export default {
       infoPlist: {
         NSFamilyControlsUsageDescription:
           'Ember uses Screen Time to block distracting apps during your focus sessions.',
+        CFBundleURLTypes: [{ CFBundleURLSchemes: ['fifteen'] }],
+        CFBundleURLName: BUNDLE_ID
       },
       entitlements: {
         // ── The entitlement Apple approved ──
@@ -27,6 +29,7 @@ export default {
         // ── App Groups: required for main app ↔ extensions to share data ──
         'com.apple.security.application-groups': [APP_GROUP],
       },
+      
     },
 
     plugins: [
@@ -56,33 +59,10 @@ export default {
     // ── EAS: tell it about the two extension targets so it generates
     //    credentials for them before the build starts ──
     extra: {
-      eas: {
-        projectId: '4f8eb1c1-4947-4a21-9cbf-7118c8cd3c00', // from expo.dev
-        build: {
-          experimental: {
-            ios: {
-              appExtensions: [
-                {
-                  targetName:       'EmberShield',
-                  bundleIdentifier: `${BUNDLE_ID}.shield`,
-                  entitlements: {
-                    'com.apple.developer.family-controls': true,
-                    'com.apple.security.application-groups': [APP_GROUP],
-                  },
-                },
-                {
-                  targetName:       'EmberMonitor',
-                  bundleIdentifier: `${BUNDLE_ID}.monitor`,
-                  entitlements: {
-                    'com.apple.developer.family-controls': true,
-                    'com.apple.security.application-groups': [APP_GROUP],
-                  },
-                },
-              ],
-            },
-          },
-        },
-      },
-    },
+      
+  eas: {
+    projectId: '4f8eb1c1-4947-4a21-9cbf-7118c8cd3c00'
+  }
+
   },
-};
+}};

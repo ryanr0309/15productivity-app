@@ -37,7 +37,7 @@ export default function ScreenTimePermissionScreen() {
   const [fontsLoaded] = useFonts({ Nunito_800ExtraBold, Nunito_700Bold, Nunito_400Regular });
 
   const [step, setStep] = useState<Step>('explain');
-  const { setScreenTimeSelectionId } = useOnboardingStore();
+  const { setScreenTimeSelectionId, setHasSeenScreenTimePrompt } = useOnboardingStore();
   const [hasSelection, setHasSelection] = useState(false);
 
   // ── Animations ────────────────────────────────────────────────────────
@@ -87,11 +87,13 @@ export default function ScreenTimePermissionScreen() {
   }, [setScreenTimeSelectionId]);
 
   const handleConfirm = useCallback(() => {
+    setHasSeenScreenTimePrompt();
     setStep('done');
     setTimeout(() => router.replace('/(tabs)'), 900);
   }, []);
 
   const handleSkip = useCallback(() => {
+    setHasSeenScreenTimePrompt();
     router.replace('/(tabs)');
   }, []);
 

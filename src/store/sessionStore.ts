@@ -5,7 +5,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { saveSession } from '../services/sessionService';
-import { startBlocking, stopBlocking } from '../services/screenTimeService';
+import { hasStoredSelection, startBlocking, stopBlocking } from '../services/screenTimeService';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 export const CHECKPOINT_INTERVAL_SEC = 3 * 60;
@@ -90,7 +90,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     // constant internally, which was set via saveSelectionToken() in the
     // screen-time onboarding screen.
     if (screenTimeSelectionId) {
+      console.log('[Ember] startBlocking called, hasSelection:', hasStoredSelection());
       await startBlocking(durationSec);
+      
     }
 
     const startedAt        = Date.now();

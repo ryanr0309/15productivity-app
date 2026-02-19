@@ -415,7 +415,7 @@ export default function CommitmentScreen() {
 
         {/* Hold to commit */}
         <Animated.View style={[styles.holdWrap, { opacity: holdA, transform: [{ translateY: holdY }], marginTop: 'auto' }]}>
-          <HoldToCommit onComplete={() => router.push('/(onboarding)/screentime')} />
+          <HoldToCommit onComplete={() => router.push('/(onboarding)/paywall')} />
         </Animated.View>
       </View>
     </View>

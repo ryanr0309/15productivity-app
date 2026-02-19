@@ -1,21 +1,14 @@
 /**
  * app/onboarding/paywall.tsx  — Screen 14: Paywall
  *
- * Uses RevenueCat's built-in presentPaywall() — the simplest and most
- * conversion-optimised approach. RC handles all the UI, pricing display,
- * purchase flow, and restore.
+ * On successful purchase or restore:
+ *   1. completeOnboarding() — marks quiz/paywall as done forever
+ *   2. Navigate to /(onboarding)/screen-time — not home. The user
+ *      sets up app blocking immediately after paying.
  *
- * Two modes:
- *   1. presentPaywall()  — RC's full-screen paywall modal (recommended)
- *   2. Custom UI below   — fallback if RC paywall isn't configured in dashboard
- *
- * Setup:
- *   npm install react-native-purchases react-native-purchases-ui
- *   npx pod-install
- *
- * In app/_layout.tsx bootstrap:
- *   import Purchases from 'react-native-purchases';
- *   Purchases.configure({ apiKey: 'appl_XXXX' });
+ * _layout.tsx handles returning users:
+ *   onboarded=true + seenScreenTime=false  → /(onboarding)/screen-time
+ *   onboarded=true + seenScreenTime=true   → /(tabs)/home
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -32,12 +25,10 @@ import {
 } from '@expo-google-fonts/nunito';
 import { COLORS, FONTS } from '../../theme';
 import { useOnboardingStore } from '../../store/onboardingStore';
-import Purchases, { LOG_LEVEL } from 'react-native-purchases';
+import Purchases from 'react-native-purchases';
 import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 
-// ── YOUR IDs — set these in RevenueCat dashboard ──────────────────────────────
 const RC_ENTITLEMENT_ID = 'Fifteen Pro';
-
 const { width: SW } = Dimensions.get('window');
 const PAD = 24;
 
@@ -50,7 +41,6 @@ const FEATURES = [
   { icon: '🔕', text: 'Smart distraction blocking' },
 ];
 
-// ── Check if user has active entitlement ─────────────────────────────────────
 async function checkEntitlement(): Promise<boolean> {
   try {
     const info = await Purchases.getCustomerInfo();
@@ -58,6 +48,14 @@ async function checkEntitlement(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// ── Single exit point for all successful purchase paths ───────────────────────
+// Always goes to screen-time next so the user can set up blocking immediately.
+// On future cold starts, _layout.tsx skips screen-time if already seen.
+async function onPurchaseSuccess(completeOnboarding: () => Promise<void>) {
+  await completeOnboarding();
+  router.replace('/(onboarding)/screentime');
 }
 
 export default function PaywallScreen() {
@@ -73,7 +71,6 @@ export default function PaywallScreen() {
   const [loading,    setLoading]    = useState(false);
   const [presenting, setPresenting] = useState(false);
 
-  // Entrance anims
   const contentA = useRef(new Animated.Value(0)).current;
   const contentY = useRef(new Animated.Value(20)).current;
   const ctaA     = useRef(new Animated.Value(0)).current;
@@ -96,45 +93,27 @@ export default function PaywallScreen() {
       ]),
     ]).start();
 
-    // Auto-present RC paywall after brief moment to let screen render
     const timer = setTimeout(() => presentRCPaywall(), 800);
     return () => clearTimeout(timer);
   }, []);
 
-  // ── Present RevenueCat's built-in paywall ─────────────────────────────────
   const presentRCPaywall = async () => {
     if (presenting) return;
     setPresenting(true);
-
     try {
-      // presentPaywall() shows RC's native paywall UI
-      // Configure the paywall appearance in your RC dashboard under
-      // Paywalls → Create Paywall
-      const result = await RevenueCatUI.presentPaywall({
-        // Optional: force a specific offering
-        // offering: await Purchases.getOfferings().then(o => o.current),
-      });
-
+      const result = await RevenueCatUI.presentPaywall();
       switch (result) {
         case PAYWALL_RESULT.PURCHASED:
-        case PAYWALL_RESULT.RESTORED:
-          // Verify entitlement and proceed
+        case PAYWALL_RESULT.RESTORED: {
           const active = await checkEntitlement();
-          if (active) {
-            completeOnboarding();
-            router.replace('/(protected)/(tabs)');
-          }
+          if (active) await onPurchaseSuccess(completeOnboarding);
           break;
-
+        }
         case PAYWALL_RESULT.NOT_PRESENTED:
-          // RC paywall not configured in dashboard — fall back to custom UI below
           console.warn('RC paywall not configured — showing custom fallback UI');
           break;
-
         case PAYWALL_RESULT.CANCELLED:
-          // User dismissed — stay on screen, let them use the custom CTA below
           break;
-
         case PAYWALL_RESULT.ERROR:
           Alert.alert('Something went wrong', 'Please try again or restore your purchase.');
           break;
@@ -146,28 +125,23 @@ export default function PaywallScreen() {
     }
   };
 
-  // ── Re-present if user comes back from background (e.g. went to settings) ──
+  // Re-check if user paid on another device / via Settings
   useEffect(() => {
     const sub = AppState.addEventListener('change', async state => {
       if (state === 'active') {
         const active = await checkEntitlement();
-        if (active) {
-          completeOnboarding();
-          router.replace('/(protected)/(tabs)');
-        }
+        if (active) await onPurchaseSuccess(completeOnboarding);
       }
     });
     return () => sub.remove();
   }, []);
 
-  // ── Restore purchases ─────────────────────────────────────────────────────
   const handleRestore = async () => {
     setLoading(true);
     try {
       const info = await Purchases.restorePurchases();
       if (info.entitlements.active[RC_ENTITLEMENT_ID]) {
-        completeOnboarding();
-        router.replace('/(protected)/(tabs)');
+        await onPurchaseSuccess(completeOnboarding);
       } else {
         Alert.alert('No purchases found', 'No active subscription found for this account.');
       }
@@ -190,10 +164,6 @@ export default function PaywallScreen() {
   };
   const goalText = goalMap[protectTime ?? ''] ?? 'your goals';
 
-  // ── Render ────────────────────────────────────────────────────────────────
-  // This screen sits behind the RC paywall modal.
-  // If RC paywall is configured, users see the RC UI instantly.
-  // If not configured yet, this custom UI is the fallback.
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
@@ -210,7 +180,6 @@ export default function PaywallScreen() {
         paddingBottom: insets.bottom + 24,
       }]}>
 
-        {/* Header */}
         <Animated.View style={[styles.header, { opacity: contentA, transform: [{ translateY: contentY }] }]}>
           <Text style={styles.trialBadge}>✦  7-DAY FREE TRIAL  ✦</Text>
           <Text style={styles.headline}>
@@ -223,7 +192,6 @@ export default function PaywallScreen() {
           </Text>
         </Animated.View>
 
-        {/* Features */}
         <Animated.View style={[styles.featsGrid, { opacity: contentA, transform: [{ translateY: contentY }] }]}>
           {FEATURES.map((f, i) => (
             <View key={i} style={styles.featItem}>
@@ -235,9 +203,7 @@ export default function PaywallScreen() {
 
         <View style={{ flex: 1 }} />
 
-        {/* CTA — opens RC paywall */}
         <Animated.View style={[styles.ctaBlock, { opacity: ctaA, transform: [{ translateY: ctaY }] }]}>
-
           <TouchableOpacity
             style={styles.ctaBtn}
             onPress={presentRCPaywall}
@@ -249,11 +215,10 @@ export default function PaywallScreen() {
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
               style={styles.ctaGrad}
             >
-              {presenting ? (
-                <ActivityIndicator color="#1A0602" size="small" />
-              ) : (
-                <Text style={styles.ctaTxt}>See pricing — 7 days free</Text>
-              )}
+              {presenting
+                ? <ActivityIndicator color="#1A0602" size="small" />
+                : <Text style={styles.ctaTxt}>See pricing — 7 days free</Text>
+              }
             </LinearGradient>
           </TouchableOpacity>
 
@@ -261,7 +226,6 @@ export default function PaywallScreen() {
             Free for 7 days. Cancel anytime before trial ends — you won't be charged.
           </Text>
 
-          {/* Restore + legal */}
           <View style={styles.footer}>
             <TouchableOpacity onPress={handleRestore} activeOpacity={0.7} disabled={loading}>
               {loading
@@ -317,12 +281,12 @@ const styles = StyleSheet.create({
   subBold: { fontFamily: FONTS.bold, color: 'rgba(255,244,230,0.70)' },
 
   featsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  featItem:  {
+  featItem: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     width: (SW - PAD * 2 - 10) / 2,
   },
   featIcon: { fontSize: 16, width: 24, textAlign: 'center' },
-  featTxt:  {
+  featTxt: {
     fontFamily: FONTS.regular, fontSize: 12,
     color: 'rgba(255,244,230,0.55)', flex: 1, lineHeight: 17,
   },
@@ -347,7 +311,7 @@ const styles = StyleSheet.create({
     textAlign: 'center', lineHeight: 17,
   },
 
-  footer:    { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
+  footer:     { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   footerLink: { fontFamily: FONTS.regular, fontSize: 11, color: 'rgba(255,244,230,0.28)', textDecorationLine: 'underline' },
   footerDot:  { color: 'rgba(255,244,230,0.18)', fontSize: 11 },
 });

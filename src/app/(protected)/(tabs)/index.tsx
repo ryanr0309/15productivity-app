@@ -8,6 +8,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
+import AppBlockerSheet from '../../../components/AppBlockerSheet';
 import {
   View, Text, Image, TouchableOpacity,
   StyleSheet, Animated, Dimensions, StatusBar, Easing,
@@ -27,6 +28,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import StartSessionModal from '../../../components/StartSessionModal';
 import ScreenTimeButton from '../../../components/ScreenTime';
+import { useOnboardingStore } from '../../../store/onboardingStore';
 
 const { width, height } = Dimensions.get('window');
 const MASCOT_SIZE = Math.round(width * 0.44);
@@ -270,6 +272,8 @@ export default function HomeScreen() {
   });
 
   const [modalVisible, setModalVisible] = useState(false);
+  const [blockerOpen, setBlockerOpen] = useState(false);
+  const screenTimeSelectionId = useOnboardingStore(s=> s.screenTimeSelectionId);
 
   // ── Animations ──────────────────────────────────────────────────────────────
   const floatAnim = useRef(new Animated.Value(0)).current;
@@ -346,10 +350,24 @@ export default function HomeScreen() {
         </Animated.View>
 
         {/* Streak pill */}
-        <TouchableOpacity style={styles.streakPill} activeOpacity={0.7}>
-          <Text style={styles.streakEmoji}>🔥</Text>
-          <Text style={styles.streakText}>7 day streak</Text>
-        </TouchableOpacity>
+        {/* Streak pill */}
+
+
+{/* Blocked apps card */}
+<TouchableOpacity
+  style={styles.blockerCard}
+  activeOpacity={0.75}
+  onPress={() => setBlockerOpen(true)}
+>
+  <Text style={styles.blockerIcon}>🚫</Text>
+  <View style={{ flex: 1 }}>
+    <Text style={styles.blockerLabel}>Blocked Apps</Text>
+    <Text style={styles.blockerSub}>
+      {screenTimeSelectionId ? 'Tap to manage' : 'Tap to set up'}
+    </Text>
+  </View>
+  <Text style={styles.blockerChevron}>›</Text>
+</TouchableOpacity>
 
       </Animated.View>
 
@@ -358,6 +376,10 @@ export default function HomeScreen() {
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
       />
+      <AppBlockerSheet
+  visible={blockerOpen}
+  onClose={() => setBlockerOpen(false)}
+/>
     </View>
   );
 }
@@ -439,4 +461,21 @@ const styles = StyleSheet.create({
     color: '#FFF4E6',
     letterSpacing: 0.2,
   },
+  blockerCard: {
+  flexDirection:   'row',
+  alignItems:      'center',
+  gap:             12,
+  width:           '100%',
+  marginTop:       10,
+  paddingHorizontal: 18,
+  paddingVertical: 14,
+  borderRadius:    16,
+  borderWidth:     1,
+  borderColor:     'rgba(255,107,26,0.18)',
+  backgroundColor: 'rgba(255,255,255,0.04)',
+},
+blockerIcon:    { fontSize: 20 },
+blockerLabel:   { fontFamily: 'Nunito_700Bold', fontSize: 14, color: '#FFF4E6' },
+blockerSub:     { fontFamily: 'Nunito_400Regular', fontSize: 12, color: 'rgba(255,244,230,0.40)', marginTop: 2 },
+blockerChevron: { fontFamily: 'Nunito_700Bold', fontSize: 22, color: 'rgba(255,244,230,0.25)' },
 });
