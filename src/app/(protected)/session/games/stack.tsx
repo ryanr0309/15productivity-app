@@ -44,6 +44,8 @@ import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSessionStore } from '../../../../store/sessionStore';
 import { FONTS } from '../../../../theme';
+import { useBreakTimer } from '../../../../hooks/useBreakTimer';
+import { BreakStatusBar } from '../../../../components/BreakStatusBar';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -88,6 +90,7 @@ interface TrimPiece {
 }
 
 export default function StackBlocksGame() {
+    useBreakTimer(); // auto-ejects to /session after break time expires
   const insets = useSafeAreaInsets();
   const completeCheckpoint = useSessionStore(s => s.completeCheckpoint);
 
@@ -208,7 +211,7 @@ export default function StackBlocksGame() {
     if (overlapW <= 0) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setGameOver(true);
-      setTimeout(() => handleEnd(), 800);
+      setTimeout(() => router.back(), 800);
       return;
     }
 
@@ -278,15 +281,12 @@ export default function StackBlocksGame() {
     if (newDrops >= TOTAL_DROPS) {
       setGameWon(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setTimeout(() => handleEnd(), 1200);
+      setTimeout(() => router.back(), 1200);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placed, dropsDone, gameOver, gameWon]);
 
-  const handleEnd = useCallback(async () => {
-    await completeCheckpoint();
-    router.replace('/session');
-  }, [completeCheckpoint]);
+
 
   // ── Derive block positions in arena (stack grows upward) ──────────────────
   // Bottom of arena = bottom of stack. Each block sits on top of the previous.
@@ -310,11 +310,12 @@ export default function StackBlocksGame() {
             <Text style={styles.topBarIcon}>📦</Text>
             <Text style={styles.topBarLabel}>STACK THE BLOCKS</Text>
           </View>
-          <TouchableOpacity style={styles.endBtn} onPress={handleEnd} activeOpacity={0.75}>
-            <Text style={styles.endBtnText}>End break ›</Text>
+          <TouchableOpacity style={styles.endBtn} onPress={()=>router.back()} activeOpacity={0.75}>
+            <Text style={styles.endBtnText}>← Games</Text>
           </TouchableOpacity>
         </View>
 
+<BreakStatusBar />
         {/* ── Score row ── */}
         <View style={styles.scoreRow}>
           <View>

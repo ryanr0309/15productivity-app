@@ -46,6 +46,7 @@ import {
 } from '@expo-google-fonts/nunito';
 import { useSessionStore, selectTimeDisplay } from '../../../store/sessionStore';
 import { COLORS, FONTS } from '../../../theme';
+import { BreakStatusBar } from '../../../components/BreakStatusBar';
 
 const { width } = Dimensions.get('window');
 
@@ -220,11 +221,7 @@ export default function GameSelectScreen() {
           </View>
 
           {/* ── Session still running pill ── */}
-          <View style={styles.sessionPill}>
-            <View style={styles.sessionDot} />
-            <Text style={styles.sessionPillText}>Session still running</Text>
-            <Text style={styles.sessionPillTime}>{timeDisplay}</Text>
-          </View>
+          <BreakStatusBar />
 
           {/* ── Featured card: Breathing Orb ── */}
           <Animated.View style={{

@@ -42,6 +42,7 @@ import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSessionStore, selectTimeDisplay } from '../../../../store/sessionStore';
 import { COLORS, FONTS } from '../../../../theme';
+import { BreakStatusBar } from '../../../../components/BreakStatusBar';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -176,10 +177,7 @@ export default function SimonSaysGame() {
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-const handleEnd = useCallback(async () => {
-    await completeCheckpoint();
-    router.replace('/session');
-  }, [completeCheckpoint]);
+
   // ── Handle player tap ──────────────────────────────────────────────────────
   const handlePadTap = useCallback((padId: number) => {
     if (phaseRef.current !== 'input') return;
@@ -205,7 +203,7 @@ const handleEnd = useCallback(async () => {
         if (sequenceRef.current.length >= TOTAL_ROUNDS) {
           setPhase('complete');
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          setTimeout(() => handleEnd(), 2000);
+          setTimeout(() => router.back(), 2000);
         } else {
           setPhase('watching');
           setTimeout(() => startRound(sequenceRef.current.length + 1, sequenceRef.current), 700);
@@ -231,7 +229,7 @@ const handleEnd = useCallback(async () => {
         playSequence(sequenceRef.current, sequenceRef.current.length);
       }, 900);
     }
-  }, [boardShake, handleEnd, lightPad, playSequence, startRound]);
+  }, [boardShake, lightPad, playSequence, startRound]);
 
   
 
@@ -267,11 +265,12 @@ const handleEnd = useCallback(async () => {
             <Text style={styles.topBarIcon}>🎵</Text>
             <Text style={styles.topBarLabel}>SIMON SAYS</Text>
           </View>
-          <TouchableOpacity style={styles.endBtn} onPress={handleEnd} activeOpacity={0.75}>
-            <Text style={styles.endBtnText}>End break ›</Text>
+          <TouchableOpacity style={styles.endBtn} onPress={()=>router.back()} activeOpacity={0.75}>
+            <Text style={styles.endBtnText}>← Games</Text>
           </TouchableOpacity>
         </View>
 
+<BreakStatusBar />
         {/* ── Score + session row ── */}
         <View style={styles.statsRow}>
           <View style={styles.sessionPill}>

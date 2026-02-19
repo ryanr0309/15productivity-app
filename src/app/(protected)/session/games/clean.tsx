@@ -45,6 +45,8 @@ import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSessionStore, selectTimeDisplay } from '../../../../store/sessionStore';
 import { COLORS, FONTS } from '../../../../theme';
+import { useBreakTimer } from '../../../../hooks/useBreakTimer';
+import { BreakStatusBar } from '../../../../components/BreakStatusBar';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -70,6 +72,7 @@ const QUOTES = [
 ];
 
 export default function CleanPhoneGame() {
+    useBreakTimer(); // auto-ejects to /session after break time expires
   const insets      = useSafeAreaInsets();
   const sessionTime = useSessionStore(selectTimeDisplay);
   const completeCheckpoint = useSessionStore(s => s.completeCheckpoint);
@@ -111,10 +114,9 @@ export default function CleanPhoneGame() {
     setTimeout(() => handleEnd(), 2000);
   }, [completeAnim, mascotScale]);
 
-  const handleEnd = useCallback(async () => {
-    await completeCheckpoint();
-    router.replace('/session');
-  }, [completeCheckpoint]);
+  const handleEnd = (async () => {
+    router.replace('/session/gameSelect');
+  });
 
   // ── Canvas layout offset ───────────────────────────────────────────────────
   const canvasOffset = useRef({ x: 0, y: 0 });
@@ -210,17 +212,15 @@ export default function CleanPhoneGame() {
             <Text style={styles.topBarIcon}>✨</Text>
             <Text style={styles.topBarLabel}>CLEAN THE SCREEN</Text>
           </View>
-          <TouchableOpacity style={styles.endBtn} onPress={handleEnd} activeOpacity={0.75}>
-            <Text style={styles.endBtnText}>End break ›</Text>
+          <TouchableOpacity style={styles.endBtn} onPress={()=>router.back()} activeOpacity={0.75}>
+            <Text style={styles.endBtnText}>← Games</Text>
           </TouchableOpacity>
         </View>
 
         {/* ── Progress + session row ── */}
+        <BreakStatusBar />
         <View style={styles.statsRow}>
-          <View style={styles.sessionPill}>
-            <View style={styles.sessionDot} />
-            <Text style={styles.sessionTime}>{sessionTime}</Text>
-          </View>
+          
           <View style={styles.progressPill}>
             <Text style={styles.progressPct}>{cleanedPct}%</Text>
             <Text style={styles.progressLabel}> cleaned</Text>

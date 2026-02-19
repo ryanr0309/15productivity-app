@@ -40,7 +40,9 @@ import {
   useSessionStore,
   selectTimeDisplay,
 } from '../../../../store/sessionStore';
-import { COLORS, FONTS } from '../../../../theme';
+import { COLORS, FONTS } from '../../../../theme'
+import { useBreakTimer } from '../../../../hooks/useBreakTimer';
+import { BreakStatusBar } from '../../../../components/BreakStatusBar';
 
 const { width } = Dimensions.get('window');
 
@@ -122,6 +124,7 @@ const flashStyles = StyleSheet.create({
 
 // ─── Main game component ───────────────────────────────────────────────────────
 export default function PopTheDotsGame() {
+    useBreakTimer(); // auto-ejects to /session after break time expires
   const insets      = useSafeAreaInsets();
   const sessionTime = useSessionStore(selectTimeDisplay);
   const completeCheckpoint = useSessionStore(s => s.completeCheckpoint);
@@ -290,26 +293,6 @@ export default function PopTheDotsGame() {
     return () => clearTimeout(spawnTimer);
   }, [arenaLayout, spawnDot]);
 
-  // ── Game timer countdown ───────────────────────────────────────────────────
-  useEffect(() => {
-    const tick = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(tick);
-          handleEnd();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(tick);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const handleEnd = useCallback(async () => {
-    await completeCheckpoint();
-    router.replace('/session');
-  }, [completeCheckpoint]);
 
   // ── Derived display ────────────────────────────────────────────────────────
   const timeMM  = Math.floor(timeLeft / 60).toString().padStart(1, '0');
@@ -338,12 +321,13 @@ export default function PopTheDotsGame() {
             <View style={styles.dotIndicator} />
             <Text style={styles.topBarLabel}>POP THE DOTS</Text>
           </View>
-          <TouchableOpacity style={styles.endBtn} onPress={handleEnd} activeOpacity={0.75}>
-            <Text style={styles.endBtnText}>End break ›</Text>
+          <TouchableOpacity style={styles.endBtn} onPress={()=>router.back()} activeOpacity={0.75}>
+            <Text style={styles.endBtnText}>← Games</Text>
           </TouchableOpacity>
         </View>
 
         {/* ── Score + combo row ── */}
+        <BreakStatusBar />
         <View style={styles.scoreRow}>
           <View>
             <Text style={styles.scoreLabel}>SCORE</Text>
@@ -471,16 +455,7 @@ export default function PopTheDotsGame() {
         {/* ── Timer row ── */}
         <View style={styles.timerSection}>
           <View style={styles.timerRow}>
-            <Text style={styles.timerLabel}>time</Text>
-            <View style={styles.timerBarWrap}>
-              <LinearGradient
-                colors={['#FF6B1A', '#FFD166']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.timerBarFill, { width: `${Math.round(timePct * 100)}%` as `${number}%` }]}
-              />
-            </View>
-            <Text style={styles.timerValue}>{timeMM}:{timeSS}</Text>
+           
           </View>
         </View>
 

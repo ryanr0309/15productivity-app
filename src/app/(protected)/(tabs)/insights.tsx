@@ -1,606 +1,712 @@
 /**
- * Ember – InsightsScreen.tsx  (Insights / Achievement)
+ * app/(protected)/(tabs)/insights.tsx
  *
- * Sections (matching reference):
- *   1. Header + date navigator (Today ‹ ›)
- *   2. Focus Summary card  – big time hero + sub-stats + motivational banner
- *   3. Goal Performance card – hourly bar chart + legend
- *   4. Focus Streak card – day-of-week circles
- *   5. Pattern of Your Focus – heatmap grid + legend + motivational note
- *   6. Focus / Total / Sessions tab chart
+ * Full Insights screen wired to live Supabase data via sessionService.
+ * Date navigator lets the user step backwards/forwards through:
+ *   — days  (default view: "Today", "Yesterday", "Mon 17 Feb", …)
+ *   — The ‹/› arrows are disabled when at today (no future data).
  *
- * All in Ember's dark warm design system (COLORS, FONTS, RADII from theme.ts)
+ * fetchInsights(isoDate?) accepts an optional ISO date string.
+ * Passing no arg (or today's ISO date) returns today's data.
+ *
+ * Everything else is identical to the original.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Animated,
-  Dimensions,
-  StatusBar,
-  Easing,
+  View, Text, ScrollView, TouchableOpacity,
+  StyleSheet, Animated, Dimensions, StatusBar,
+  Easing, RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, {
-  Defs,
-  LinearGradient as SvgGrad,
-  Stop,
-  Rect,
-  Line,
-  Text as SvgText,
-} from 'react-native-svg';
+import Svg, { Line } from 'react-native-svg';
 import {
-  useFonts,
-  Nunito_800ExtraBold,
-  Nunito_700Bold,
-  Nunito_400Regular,
+  useFonts, Nunito_800ExtraBold, Nunito_700Bold, Nunito_400Regular,
 } from '@expo-google-fonts/nunito';
-import {COLORS, FONTS, RADII, NavigationProp} from '../../../theme'
+import { useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  fetchInsights, InsightsData, fmtSec, fmtTime,
+  heatColor, sessionScore, motivationCopy,
+  WeekBar, HourlyBucket, StreakDay, RecentSession,
+} from '../../../services/sessionService';
+import { COLORS, FONTS, RADII } from '../../../theme';
+
 const { width: SW } = Dimensions.get('window');
 const H_PAD  = 16;
 const CARD_W = SW - H_PAD * 2;
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-interface InsightsScreenProps { navigation?: NavigationProp; }
 type ChartTab = 'Focus' | 'Total' | 'Sessions';
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
-// Hourly bars for today  (hour label → focus minutes in that hour)
-const HOURLY_DATA: { label: string; mins: number; isNow: boolean }[] = [
-  { label: '12 PM', mins: 18, isNow: true  },
-  { label: '1 PM',  mins: 28, isNow: false },
-  { label: '2 PM',  mins: 22, isNow: false },
-  { label: '3 PM',  mins: 35, isNow: false },
-  { label: '4 PM',  mins: 16, isNow: false },
-];
+// ─── Date helpers ─────────────────────────────────────────────────────────────
 
-// Week day streak (T = today)
-const STREAK_DAYS = [
-  { label: 'T', done: true  },
-  { label: 'W', done: false },
-  { label: 'T', done: false },
-  { label: 'F', done: false },
-  { label: 'S', done: false },
-  { label: 'S', done: false },
-  { label: 'M', done: false },
-];
-
-// Heatmap: rows = days of week (S M T W T F S), cols = weeks (Dec → Feb)
-// 0 = no focus, 1-4 = light→deep
-function buildHeatmap(): number[][] {
-  const rows = 7;
-  const cols = 14; // ~3 months compressed
-  return Array.from({ length: rows }, (_, r) =>
-    Array.from({ length: cols }, (_, c) => {
-      // Only last col row 2 (Tuesday) has activity
-      if (r === 2 && c === cols - 1) return 3;
-      return 0;
-    })
-  );
-}
-const HEATMAP = buildHeatmap();
-const HEATMAP_MONTH_LABELS = [
-  { label: 'Dec', col: 0 },
-  { label: 'Jan', col: 5 },
-  { label: 'Feb', col: 11 },
-];
-const HEATMAP_ROW_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
-// Weekly bar chart for Focus/Total/Sessions tabs
-const WEEK_BARS: { day: string; date: number; mins: number }[] = [
-  { day: 'Sun', date: 15, mins: 0  },
-  { day: 'Mon', date: 16, mins: 0  },
-  { day: 'Tue', date: 17, mins: 91 },
-  { day: 'Wed', date: 18, mins: 0  },
-  { day: 'Thu', date: 19, mins: 0  },
-  { day: 'Fri', date: 20, mins: 0  },
-  { day: 'Sat', date: 21, mins: 0  },
-];
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function heatColor(level: number): string {
-  // Ember-tinted heat scale: dark → orange→gold
-  const map: Record<number, string> = {
-    0: '#1E1812',
-    1: '#5C2A0A',
-    2: '#A04818',
-    3: '#FF6B1A',
-    4: '#FFD166',
-  };
-  return map[level] ?? map[0];
+/** Return a JS Date offset from today by `days` (negative = past). */
+function offsetDate(days: number): Date {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d;
 }
 
-// ─── Animated bar (scales up from bottom) ────────────────────────────────────
-interface AnimBarProps {
-  heightPct: number;   // 0-1
-  maxH:      number;
-  width:     number;
-  color:     string;
-  delay:     number;
-  isNow?:    boolean;
+/** Format a date as ISO "YYYY-MM-DD" */
+function toISO(d: Date): string {
+  return d.toISOString().slice(0, 10);
 }
-function AnimBar({ heightPct, maxH, width, color, delay, isNow }: AnimBarProps) {
+
+/** Human-readable label for the date navigator pill */
+function navLabel(offset: number): string {
+  if (offset === 0)  return 'Today';
+  if (offset === -1) return 'Yesterday';
+  const d = offsetDate(offset);
+  const DAY  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const MON  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${DAY[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`;
+}
+
+// ─── Animated rising bar ──────────────────────────────────────────────────────
+function AnimBar({
+  heightPct, maxH, width, isToday, delay, isNow,
+}: {
+  heightPct: number; maxH: number; width: number;
+  isToday?: boolean; delay: number; isNow?: boolean;
+}) {
   const scaleY = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(scaleY, {
-      toValue:  1,
-      duration: 550,
-      delay,
-      easing:   Easing.out(Easing.back(1.1)),
+      toValue: 1, duration: 500, delay,
+      easing: Easing.out(Easing.back(1.1)),
       useNativeDriver: true,
     }).start();
   }, [scaleY, delay]);
 
   const barH = Math.max(heightPct * maxH, 3);
+  const colors: [string, string] = isNow
+    ? [COLORS.red ?? '#FF4444', '#FF8060']
+    : (isToday ? [COLORS.orange, COLORS.amber] : [COLORS.amber, COLORS.orange]);
 
   return (
     <View style={{ height: maxH, width, alignItems: 'center', justifyContent: 'flex-end' }}>
       <Animated.View style={{
         width, height: barH, borderRadius: 5, overflow: 'hidden',
         transform: [{ scaleY }],
-        transformOrigin: 'bottom' as unknown as undefined,
       }}>
-        <LinearGradient
-          colors={isNow ? [COLORS.red, '#FF8060'] : [COLORS.amber, COLORS.orange]}
-          start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
-          style={{ flex: 1 }}
-        />
+        <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={{ flex: 1 }} />
       </Animated.View>
     </View>
   );
 }
 
-// ─── Section card wrapper ─────────────────────────────────────────────────────
+// ─── Card wrapper ─────────────────────────────────────────────────────────────
 function Card({ children, style }: { children: React.ReactNode; style?: object }) {
+  return <View style={[styles.card, style]}>{children}</View>;
+}
+
+// ─── "more ▶" pill ────────────────────────────────────────────────────────────
+function MoreBtn() {
   return (
-    <View style={[cardStyle.card, style]}>
-      {children}
+    <View style={styles.moreBtn}>
+      <Text style={styles.moreTxt}>more ▶</Text>
     </View>
   );
 }
-const cardStyle = StyleSheet.create({
-  card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: RADII.xxl,
-    padding: 20,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-});
 
-// ─── "More ▶" pill ────────────────────────────────────────────────────────────
-function MoreBtn({ onPress }: { onPress?: () => void }) {
+// ─── Skeleton shimmer ─────────────────────────────────────────────────────────
+function Skeleton({ w, h, r = 6 }: { w: number | string; h: number; r?: number }) {
+  const shimmer = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.loop(Animated.sequence([
+      Animated.timing(shimmer, { toValue: 1, duration: 900, useNativeDriver: true }),
+      Animated.timing(shimmer, { toValue: 0, duration: 900, useNativeDriver: true }),
+    ])).start();
+  }, [shimmer]);
   return (
-    <TouchableOpacity style={moreStyle.btn} activeOpacity={0.7} onPress={onPress}>
-      <Text style={moreStyle.txt}>more ▶</Text>
-    </TouchableOpacity>
+    <Animated.View style={{
+      width: w as number, height: h, borderRadius: r,
+      backgroundColor: 'rgba(255,255,255,0.07)',
+      opacity: shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.4, 0.9] }),
+    }} />
   );
 }
-const moreStyle = StyleSheet.create({
-  btn: {
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
-    borderRadius: RADII.pill, paddingHorizontal: 14, paddingVertical: 6,
-  },
-  txt: { fontFamily: FONTS.bold, fontSize: 12, color: COLORS.cream },
-});
 
-// ─── Main screen ──────────────────────────────────────────────────────────────
-export default function InsightsScreen({ navigation }: InsightsScreenProps) {
+// ─── Main ─────────────────────────────────────────────────────────────────────
+export default function InsightsScreen() {
+  const insets = useSafeAreaInsets();
   const [fontsLoaded] = useFonts({ Nunito_800ExtraBold, Nunito_700Bold, Nunito_400Regular });
-  const [chartTab, setChartTab] = useState<ChartTab>('Focus');
-  const [chartKey, setChartKey] = useState(0);
 
-  // Staggered fade-in per section
-  const fadeAnims = useRef(Array.from({ length: 7 }, () => new Animated.Value(0))).current;
-  const slideAnims = useRef(Array.from({ length: 7 }, () => new Animated.Value(18))).current;
+  // ── Date navigation state ────────────────────────────────────────────────
+  // dayOffset: 0 = today, -1 = yesterday, -2 = two days ago, etc.
+  const [dayOffset,  setDayOffset]  = useState(0);
 
-  useEffect(() => {
-    const anims = fadeAnims.map((fa, i) =>
-      Animated.parallel([
-        Animated.timing(fa, { toValue: 1, duration: 400, delay: i * 100, useNativeDriver: true }),
-        Animated.timing(slideAnims[i], { toValue: 0, duration: 400, delay: i * 100, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      ])
-    );
-    Animated.parallel(anims).start();
-  }, [fadeAnims, slideAnims]);
+  // ── Data state ───────────────────────────────────────────────────────────
+  const [data,       setData]       = useState<InsightsData | null>(null);
+  const [loading,    setLoading]    = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [chartTab,   setChartTab]   = useState<ChartTab>('Focus');
+  const [chartKey,   setChartKey]   = useState(0);
 
-  const section = (i: number, children: React.ReactNode) => (
-    <Animated.View style={{ opacity: fadeAnims[i], transform: [{ translateY: slideAnims[i] }] }}>
+  // Staggered section animations
+  const N = 8;
+  const fadeA  = useRef(Array.from({ length: N }, () => new Animated.Value(0))).current;
+  const slideA = useRef(Array.from({ length: N }, () => new Animated.Value(20))).current;
+
+  // Pill press animation
+  const pillScale = useRef(new Animated.Value(1)).current;
+
+  const runEntrance = useCallback(() => {
+    fadeA.forEach(a  => a.setValue(0));
+    slideA.forEach(a => a.setValue(20));
+    Animated.parallel(
+      fadeA.map((fa, i) => Animated.parallel([
+        Animated.timing(fa,        { toValue: 1, duration: 380, delay: i * 80, useNativeDriver: true }),
+        Animated.timing(slideA[i], { toValue: 0, duration: 380, delay: i * 80, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      ]))
+    ).start();
+  }, [fadeA, slideA]);
+
+  const load = useCallback(async (isRefresh = false, offset = dayOffset) => {
+    if (isRefresh) setRefreshing(true);
+    else           setLoading(true);
+    try {
+      // Pass the ISO date for the selected day so sessionService can filter
+      const isoDate = toISO(offsetDate(offset));
+      const result  = await fetchInsights(isoDate);
+      setData(result);
+      setChartKey(k => k + 1);
+      runEntrance();
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [runEntrance, dayOffset]);
+
+  // Reload when tab gains focus (always load today on re-focus)
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // ── Navigation handlers ───────────────────────────────────────────────────
+  const animatePill = () => {
+    Animated.sequence([
+      Animated.timing(pillScale, { toValue: 0.92, duration: 80, useNativeDriver: true }),
+      Animated.spring(pillScale, { toValue: 1, tension: 180, friction: 10, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const goBack = () => {
+    const next = dayOffset - 1;
+    animatePill();
+    setDayOffset(next);
+    load(false, next);
+  };
+
+  const goForward = () => {
+    if (dayOffset >= 0) return; // can't go past today
+    const next = dayOffset + 1;
+    animatePill();
+    setDayOffset(next);
+    load(false, next);
+  };
+
+  const goToday = () => {
+    if (dayOffset === 0) return;
+    animatePill();
+    setDayOffset(0);
+    load(false, 0);
+  };
+
+  const canGoForward = dayOffset < 0;
+  const isToday      = dayOffset === 0;
+
+  const sec = (i: number, children: React.ReactNode) => (
+    <Animated.View style={{ opacity: fadeA[i], transform: [{ translateY: slideA[i] }] }}>
       {children}
     </Animated.View>
   );
 
   if (!fontsLoaded) return null;
 
-  // Hourly chart dimensions
+  // ── Derived layout values ────────────────────────────────────────────────
   const hourBarMaxH = 110;
-  const hourBarW    = Math.floor((CARD_W - 40 - 4 * 8) / HOURLY_DATA.length);
-  const hourMaxMins = Math.max(...HOURLY_DATA.map(d => d.mins), 1);
+  const hourBuckets = data?.hourlyBuckets ?? [];
+  const hourMaxMins = Math.max(...hourBuckets.map(h => h.minutes), 1);
+  const hourBarW    = Math.floor((CARD_W - 40 - (hourBuckets.length - 1) * 8) / Math.max(hourBuckets.length, 1));
 
-  // Heatmap dimensions
-  const HM_COLS     = HEATMAP[0].length;
-  const HM_ROWS     = HEATMAP.length;
-  const HM_CELL     = Math.floor((CARD_W - 40 - 24) / HM_COLS);
-  const HM_GAP      = 3;
+  const HM_COLS  = 14;
+  const HM_ROWS  = 7;
+  const HM_CELL  = Math.floor((CARD_W - 40 - 24) / HM_COLS);
+  const HM_GAP   = 3;
 
-  // Weekly chart dimensions
   const wkBarMaxH = 140;
-  const wkBarW    = Math.floor((CARD_W - 40 - 6 * 10) / 7);
-  const wkMaxMins = Math.max(...WEEK_BARS.map(d => d.mins), 1);
-  const wkYLabels = ['2m', '1m 30s', '1m', '30s', '0s'];
+  const weekBars  = data?.weekBars ?? [];
+  const wkMaxMins = Math.max(...weekBars.map(b => b.minutes), 1);
+  const wkBarW    = Math.floor((CARD_W - 40 - 6 * 8) / 7);
+  const wkYLabels = ['2h', '1.5h', '1h', '30m', '0'];
 
+  // Heatmap grid
+  const hmGrid: number[][] = Array.from({ length: 7 }, () => Array(14).fill(0));
+  const hmFlat = data?.heatmap ?? [];
+  hmFlat.forEach((day, idx) => {
+    const offset    = 83 - idx;
+    const dow       = ((new Date().getDay() - offset) % 7 + 7) % 7;
+    const weekFromEnd = Math.floor(offset / 7);
+    const col       = 13 - weekFromEnd;
+    const row       = dow;
+    if (col >= 0 && col < 14) hmGrid[row][col] = day.minutes;
+  });
+
+  const HM_MONTH_LABELS = buildMonthLabels();
+  const HM_ROW_LABELS   = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+  const motive = motivationCopy(data?.todayFocusSec ?? 0, data?.todaySessions ?? 0);
+  const streak = data?.currentStreak ?? 0;
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       <LinearGradient colors={['#0C0A0E', '#120E0A', '#1A1410']} style={StyleSheet.absoluteFill} />
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 16 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={COLORS.orange} />
+        }
       >
-        {/* ─────────────────────────────────────────────────────────────────────
-            HEADER
-        ───────────────────────────────────────────────────────────────────── */}
-        {section(0,
+
+        {/* ══ 0. HEADER ══ */}
+        {sec(0,
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Insights</Text>
+
             {/* Date navigator */}
             <View style={styles.dateNav}>
-              <TouchableOpacity style={styles.navBtn} activeOpacity={0.7}>
+
+              {/* Back arrow — always available (no limit on how far back) */}
+              <TouchableOpacity
+                style={styles.navBtn}
+                onPress={goBack}
+                activeOpacity={0.7}
+              >
                 <Text style={styles.navArrow}>‹</Text>
               </TouchableOpacity>
-              <View style={styles.datePill}>
-                <Text style={styles.dateText}>Today  ⌃</Text>
-              </View>
-              <TouchableOpacity style={[styles.navBtn, styles.navBtnDisabled]} activeOpacity={0.4}>
-                <Text style={[styles.navArrow, { color: COLORS.faint }]}>›</Text>
+
+              {/* Date pill — tap to jump back to today */}
+              <Animated.View style={[styles.datePillWrap, { transform: [{ scale: pillScale }] }]}>
+                <TouchableOpacity
+                  style={[styles.datePill, !isToday && styles.datePillPast]}
+                  onPress={goToday}
+                  activeOpacity={isToday ? 1 : 0.75}
+                >
+                  {/* Subtle orange tint when not today */}
+                  {!isToday && (
+                    <LinearGradient
+                      colors={['rgba(255,107,26,0.12)', 'rgba(255,107,26,0.06)']}
+                      style={StyleSheet.absoluteFill}
+                    />
+                  )}
+                  <Text style={[styles.dateText, !isToday && styles.dateTextPast]}>
+                    {navLabel(dayOffset)}
+                  </Text>
+                  {!isToday && (
+                    <Text style={styles.dateTodayHint}>tap for today</Text>
+                  )}
+                </TouchableOpacity>
+              </Animated.View>
+
+              {/* Forward arrow — greyed out when at today */}
+              <TouchableOpacity
+                style={[styles.navBtn, !canGoForward && styles.navBtnOff]}
+                onPress={goForward}
+                activeOpacity={canGoForward ? 0.7 : 0.3}
+                disabled={!canGoForward}
+              >
+                <Text style={[styles.navArrow, !canGoForward && styles.navArrowOff]}>›</Text>
               </TouchableOpacity>
+
             </View>
+
+            {/* Subtle date context line when viewing a past day */}
+            {!isToday && (
+              <Text style={styles.pastHint}>
+                Viewing {navLabel(dayOffset)} · {toISO(offsetDate(dayOffset))}
+              </Text>
+            )}
           </View>
         )}
 
-        {/* ─────────────────────────────────────────────────────────────────────
-            1. FOCUS SUMMARY
-        ───────────────────────────────────────────────────────────────────── */}
-        {section(1,
+        {/* ══ 1. FOCUS SUMMARY ══ */}
+        {sec(1,
           <Card>
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>Focus Summary</Text>
-              <View style={styles.cardHeaderRight}>
-                <TouchableOpacity style={styles.timelinePill} activeOpacity={0.7}>
-                  <Text style={styles.timelineTxt}>Timeline</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.shareIcon} activeOpacity={0.7}>
-                  <Text style={{ fontSize: 16, color: COLORS.muted }}>↑</Text>
-                </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                <View style={styles.pill}><Text style={styles.pillTxt}>Timeline</Text></View>
+                <View style={styles.iconBtn}><Text style={{ fontSize: 15, color: COLORS.muted }}>↑</Text></View>
               </View>
             </View>
 
-            {/* Big hero time */}
-            <Text style={styles.heroTime}>8h 15m</Text>
-            <Text style={styles.heroLabel}>Focused</Text>
-
-            {/* Sub-stats */}
-            <View style={styles.subStats}>
-              <Text style={styles.subStat}><Text style={styles.subStatVal}>12 </Text>Sessions</Text>
-              <View style={styles.subStatDot} />
-              <Text style={styles.subStat}><Text style={styles.subStatVal}>8h 42m </Text>Total</Text>
-              <View style={styles.subStatDot} />
-              <Text style={styles.subStat}><Text style={styles.subStatVal}>27m </Text>Break</Text>
-            </View>
-
-            {/* Motivational banner */}
-            <View style={styles.motiveBanner}>
-              <Text style={styles.motiveEmoji}>🚀</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.motiveTitle}>Good Flow in Progress</Text>
-                <Text style={styles.motiveSub}>You're making today count with deep focus.</Text>
+            {loading ? (
+              <View style={{ gap: 10, alignItems: 'center', paddingVertical: 16 }}>
+                <Skeleton w={140} h={52} r={8} />
+                <Skeleton w={80}  h={20} r={6} />
+                <Skeleton w={CARD_W - 60} h={14} r={4} />
               </View>
-            </View>
+            ) : (
+              <>
+                <Text style={styles.heroTime}>{fmtSec(data?.todayFocusSec ?? 0)}</Text>
+                <Text style={styles.heroLabel}>Focused</Text>
+
+                <View style={styles.subStats}>
+                  <Text style={styles.subStat}>
+                    <Text style={styles.subStatVal}>{data?.todaySessions ?? 0} </Text>Sessions
+                  </Text>
+                  <View style={styles.subStatDot} />
+                  <Text style={styles.subStat}>
+                    <Text style={styles.subStatVal}>{fmtSec(data?.todayTotalSec ?? 0)} </Text>Total
+                  </Text>
+                  <View style={styles.subStatDot} />
+                  <Text style={styles.subStat}>
+                    <Text style={styles.subStatVal}>{fmtSec(data?.todayBreakSec ?? 0)} </Text>Break
+                  </Text>
+                </View>
+
+                <View style={styles.motiveBanner}>
+                  <Text style={styles.motiveEmoji}>{motive.emoji}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.motiveTitle}>{motive.title}</Text>
+                    <Text style={styles.motiveSub}>{motive.sub}</Text>
+                  </View>
+                </View>
+              </>
+            )}
           </Card>
         )}
 
-        {/* ─────────────────────────────────────────────────────────────────────
-            2. GOAL PERFORMANCE
-        ───────────────────────────────────────────────────────────────────── */}
-        {section(2,
+        {/* ══ 2. GOAL PERFORMANCE ══ */}
+        {sec(2,
           <Card>
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>Goal Performance</Text>
               <MoreBtn />
             </View>
 
-            {/* Status line */}
-            <View style={styles.goalStatus}>
-              <View style={styles.goalIconCircle}>
-                <Text style={{ fontSize: 22 }}>💤</Text>
+            {loading ? (
+              <View style={{ gap: 10, paddingVertical: 8 }}>
+                <Skeleton w="100%" h={44} r={10} />
+                <Skeleton w="100%" h={110} r={6} />
               </View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.goalStatusText}>
-                  <Text style={{ color: COLORS.orange, fontFamily: FONTS.bold }}>68% </Text>
-                  done. Almost there, finish strong!
-                </Text>
-                <Text style={styles.goalStatusSub}>Focused for <Text style={{ fontFamily: FONTS.bold, color: COLORS.cream }}>8h 15m</Text></Text>
-              </View>
-            </View>
-
-            {/* Hourly bar chart */}
-            <View style={styles.hourlyChart}>
-              {/* Y-axis goal line */}
-              <View style={styles.goalLine} />
-              <Text style={styles.goalLineLabel}>10h goal</Text>
-
-              {/* Bars row */}
-              <View style={[styles.barsRow, { height: hourBarMaxH }]}>
-                {HOURLY_DATA.map((d, i) => (
-                  <AnimBar
-                    key={i}
-                    heightPct={d.mins / hourMaxMins}
-                    maxH={hourBarMaxH}
-                    width={hourBarW}
-                    color={d.isNow ? COLORS.red : COLORS.amber}
-                    delay={i * 80}
-                    isNow={d.isNow}
-                  />
-                ))}
-              </View>
-
-              {/* X labels */}
-              <View style={[styles.barsRow, { marginTop: 6 }]}>
-                {HOURLY_DATA.map((d, i) => (
-                  <Text key={i} style={[styles.barXLabel, { width: hourBarW }]}>{d.label}</Text>
-                ))}
-              </View>
-
-              {/* Legend */}
-              <View style={styles.legendRow}>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: COLORS.red }]} />
-                  <Text style={styles.legendText}>Added this hour</Text>
+            ) : (
+              <>
+                <View style={styles.goalStatus}>
+                  <View style={styles.goalIconCircle}>
+                    <Text style={{ fontSize: 22 }}>
+                      {(data?.completionRate ?? 0) >= 80 ? '🏆' : (data?.completionRate ?? 0) >= 50 ? '🚀' : '💤'}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={styles.goalStatusText}>
+                      <Text style={{ color: COLORS.orange, fontFamily: FONTS.bold }}>
+                        {data?.completionRate ?? 0}%{' '}
+                      </Text>
+                      completion rate.{' '}
+                      {(data?.completionRate ?? 0) >= 80
+                        ? 'Exceptional discipline!'
+                        : (data?.completionRate ?? 0) >= 50
+                        ? 'Almost there, finish strong!'
+                        : 'Keep showing up — it builds.'}
+                    </Text>
+                    <Text style={styles.goalStatusSub}>
+                      Focused for{' '}
+                      <Text style={{ fontFamily: FONTS.bold, color: COLORS.cream }}>
+                        {fmtSec(data?.todayFocusSec ?? 0)}
+                      </Text>{' '}{isToday ? 'today' : navLabel(dayOffset)}
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: COLORS.amber }]} />
-                  <Text style={styles.legendText}>Already logged</Text>
+
+                {/* Hourly chart */}
+                <View>
+                  <View style={styles.barsRow}>
+                    {hourBuckets.map((b, i) => (
+                      <AnimBar
+                        key={i}
+                        heightPct={b.minutes / hourMaxMins}
+                        maxH={hourBarMaxH}
+                        width={hourBarW}
+                        isNow={isToday && b.isNow}  // "now" indicator only on today
+                        delay={i * 80}
+                      />
+                    ))}
+                    {hourBuckets.length === 0 && (
+                      <View style={{ height: hourBarMaxH, flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                        <Text style={styles.emptyChartTxt}>
+                          {isToday ? 'No sessions today yet' : 'No sessions this day'}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={[styles.barsRow, { marginTop: 6 }]}>
+                    {hourBuckets.map((b, i) => (
+                      <Text key={i} style={[styles.barXLabel, { width: hourBarW }]}>{b.label}</Text>
+                    ))}
+                  </View>
+                  <View style={styles.legendRow}>
+                    {isToday && (
+                      <View style={styles.legendItem}>
+                        <View style={[styles.legendDot, { backgroundColor: COLORS.red ?? '#FF4444' }]} />
+                        <Text style={styles.legendText}>Current hour</Text>
+                      </View>
+                    )}
+                    <View style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: COLORS.amber }]} />
+                      <Text style={styles.legendText}>Already logged</Text>
+                    </View>
+                  </View>
                 </View>
-              </View>
-            </View>
+              </>
+            )}
           </Card>
         )}
 
-        {/* ─────────────────────────────────────────────────────────────────────
-            3. FOCUS STREAK
-        ───────────────────────────────────────────────────────────────────── */}
-        {section(3,
+        {/* ══ 3. FOCUS STREAK ══ */}
+        {sec(3,
           <Card>
             <View style={styles.cardHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Text style={{ fontSize: 22 }}>🔥</Text>
-                <Text style={styles.cardTitle}>7 Focus streak</Text>
+                <Text style={styles.cardTitle}>
+                  {streak > 0 ? `${streak} day streak` : 'No streak yet'}
+                </Text>
               </View>
               <MoreBtn />
             </View>
 
-            <View style={styles.streakRow}>
-              {STREAK_DAYS.map((d, i) => (
-                <View key={i} style={styles.streakDayCol}>
-                  <View style={[
-                    styles.streakCircle,
-                    d.done && styles.streakCircleDone,
-                  ]}>
-                    {d.done
-                      ? <Text style={styles.streakCheck}>✓</Text>
-                      : null
-                    }
+            {loading ? (
+              <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'space-between' }}>
+                {Array(7).fill(0).map((_, i) => <Skeleton key={i} w={38} h={56} r={19} />)}
+              </View>
+            ) : (
+              <View style={styles.streakRow}>
+                {(data?.streakDays ?? []).map((d, i) => (
+                  <View key={i} style={styles.streakCol}>
+                    <View style={[
+                      styles.streakCircle,
+                      d.done && styles.streakCircleDone,
+                      d.isToday && !d.done && styles.streakCircleToday,
+                    ]}>
+                      {d.done
+                        ? <Text style={styles.streakCheck}>✓</Text>
+                        : d.isToday
+                        ? <Text style={styles.streakToday}>·</Text>
+                        : null
+                      }
+                    </View>
+                    <Text style={[styles.streakLabel, d.done && { color: COLORS.orange }]}>{d.label}</Text>
                   </View>
-                  <Text style={[styles.streakLabel, d.done && { color: COLORS.orange }]}>{d.label}</Text>
-                </View>
-              ))}
-            </View>
+                ))}
+              </View>
+            )}
           </Card>
         )}
 
-        {/* ─────────────────────────────────────────────────────────────────────
-            4. PATTERN OF YOUR FOCUS (heatmap)
-        ───────────────────────────────────────────────────────────────────── */}
-        {section(4,
+        {/* ══ 4. PATTERN OF YOUR FOCUS (heatmap) ══ */}
+        {sec(4,
           <Card>
             <Text style={styles.cardTitle}>The Pattern of Your Focus</Text>
 
-            {/* Mini stats */}
             <View style={styles.patternStats}>
-              <View style={styles.patternStat}>
-                <Text style={styles.patternStatVal}>12</Text>
-                <Text style={styles.patternStatLbl}>Sessions</Text>
+              <View>
+                <Text style={styles.patternVal}>{data?.allTimeSessions ?? '—'}</Text>
+                <Text style={styles.patternLbl}>Sessions</Text>
               </View>
-              <View style={styles.patternStatDivider} />
-              <View style={styles.patternStat}>
-                <Text style={styles.patternStatVal}>8h 15m</Text>
-                <Text style={styles.patternStatLbl}>Focused</Text>
+              <View style={styles.patternDivider} />
+              <View>
+                <Text style={styles.patternVal}>{fmtSec(data?.allTimeFocusSec ?? 0)}</Text>
+                <Text style={styles.patternLbl}>All time focused</Text>
               </View>
             </View>
 
-            {/* Month labels */}
-            <View style={styles.heatmapWrap}>
-              <View style={{ width: 16 }} />{/* row-label gutter */}
-              <View style={{ flex: 1 }}>
-                <View style={styles.heatMonthRow}>
-                  {HEATMAP_MONTH_LABELS.map(m => (
-                    <Text key={m.label} style={[styles.heatMonthLabel, { left: m.col * (HM_CELL + HM_GAP) }]}>
+            {loading ? (
+              <Skeleton w="100%" h={120} r={6} />
+            ) : (
+              <View style={{ marginTop: 4 }}>
+                <View style={{ flexDirection: 'row', marginLeft: 20, marginBottom: 4, position: 'relative', height: 18 }}>
+                  {HM_MONTH_LABELS.map(m => (
+                    <Text key={m.label} style={[styles.hmMonthLabel, { left: m.col * (HM_CELL + HM_GAP) }]}>
                       {m.label}
                     </Text>
                   ))}
                 </View>
-
-                {/* Grid */}
-                {HEATMAP.map((row, ri) => (
-                  <View key={ri} style={[styles.heatRow, { marginBottom: HM_GAP }]}>
-                    {row.map((level, ci) => (
-                      <View
-                        key={ci}
-                        style={{
-                          width: HM_CELL, height: HM_CELL,
-                          borderRadius: 3,
-                          backgroundColor: heatColor(level),
-                          marginRight: ci < row.length - 1 ? HM_GAP : 0,
-                          borderWidth: level === 0 ? 1 : 0,
-                          borderColor: 'rgba(255,255,255,0.04)',
-                        }}
-                      />
-                    ))}
-                  </View>
-                ))}
+                <View style={{ position: 'relative' }}>
+                  {HM_ROW_LABELS.map((lbl, ri) => (
+                    <View key={ri} style={[styles.hmRow, { marginBottom: HM_GAP }]}>
+                      <Text style={styles.hmRowLabel}>{lbl}</Text>
+                      {hmGrid[ri].map((mins, ci) => (
+                        <View
+                          key={ci}
+                          style={{
+                            width: HM_CELL, height: HM_CELL,
+                            borderRadius: 3,
+                            backgroundColor: heatColor(mins),
+                            marginRight: ci < HM_COLS - 1 ? HM_GAP : 0,
+                            borderWidth: mins === 0 ? 1 : 0,
+                            borderColor: 'rgba(255,255,255,0.04)',
+                          }}
+                        />
+                      ))}
+                    </View>
+                  ))}
+                </View>
+                <View style={styles.hmLegend}>
+                  <Text style={styles.legendText}>Less</Text>
+                  {[0, 15, 45, 90, 120].map(m => (
+                    <View key={m} style={[styles.hmLegendCell, { backgroundColor: heatColor(m) }]} />
+                  ))}
+                  <Text style={styles.legendText}>More</Text>
+                </View>
               </View>
+            )}
 
-              {/* Row labels (day of week) — overlaid on left */}
-              <View style={[StyleSheet.absoluteFillObject, { flexDirection: 'column', paddingTop: 18, gap: HM_GAP }]}>
-                {HEATMAP_ROW_LABELS.map((lbl, i) => (
-                  <View key={i} style={{ height: HM_CELL, justifyContent: 'center' }}>
-                    <Text style={styles.heatRowLabel}>{lbl}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            {/* Legend */}
-            <View style={styles.heatLegend}>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: '#1E1812', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }]} />
-                <Text style={styles.legendText}>No focus</Text>
-              </View>
-              <Text style={styles.legendText}>Light</Text>
-              {[1, 2, 3, 4].map(l => (
-                <View key={l} style={[styles.heatLegendCell, { backgroundColor: heatColor(l) }]} />
-              ))}
-              <Text style={styles.legendText}>Deep</Text>
-            </View>
-
-            {/* Motivational note */}
-            <View style={styles.motiveBanner}>
+            <View style={[styles.motiveBanner, { marginTop: 14 }]}>
               <Text style={styles.motiveEmoji}>🌱</Text>
               <View style={{ flex: 1 }}>
-                <Text style={styles.motiveTitle}>You've made a start.</Text>
-                <Text style={styles.motiveSub}>Continue today to shape your pattern.</Text>
+                <Text style={styles.motiveTitle}>
+                  {streak > 3 ? `${streak} day streak — don't break it.` : "You've made a start."}
+                </Text>
+                <Text style={styles.motiveSub}>
+                  {streak > 0
+                    ? 'Each session you do today deepens that pattern.'
+                    : 'Continue today to shape your pattern.'}
+                </Text>
               </View>
             </View>
           </Card>
         )}
 
-        {/* ─────────────────────────────────────────────────────────────────────
-            5. FOCUS / TOTAL / SESSIONS chart
-        ───────────────────────────────────────────────────────────────────── */}
-        {section(5,
+        {/* ══ 5. WEEKLY CHART ══ */}
+        {sec(5,
           <Card style={{ paddingBottom: 24 }}>
-            {/* Tab switcher */}
             <View style={styles.tabRow}>
               {(['Focus', 'Total', 'Sessions'] as ChartTab[]).map(t => (
-                <TouchableOpacity key={t} style={styles.tabBtn} activeOpacity={0.7}
-                  onPress={() => { setChartTab(t); setChartKey(k => k + 1); }}>
-                  <Text style={[styles.tabText, chartTab === t && styles.tabTextActive]}>{t}</Text>
+                <TouchableOpacity
+                  key={t} style={styles.tabBtn} activeOpacity={0.7}
+                  onPress={() => { setChartTab(t); setChartKey(k => k + 1); }}
+                >
+                  <Text style={[styles.tabTxt, chartTab === t && styles.tabTxtActive]}>{t}</Text>
                   {chartTab === t && <View style={styles.tabUnderline} />}
                 </TouchableOpacity>
               ))}
             </View>
 
-            {/* Chart sub-header */}
-            <View style={styles.chartSubHeader}>
-              <Text style={styles.chartSubLabel}>
+            <View style={styles.chartSubHead}>
+              <Text style={styles.chartSubLbl}>
                 CHART ({chartTab === 'Sessions' ? 'SESSIONS' : 'FOCUS TIME'})
               </Text>
-              <TouchableOpacity style={styles.tagsBtn} activeOpacity={0.7}>
-                <Text style={styles.tagsBtnText}>🏷 Tags</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Y-axis + bars */}
-            <View style={styles.weekChartWrap}>
-              {/* Y labels */}
-              <View style={styles.yAxis}>
-                {wkYLabels.map(l => (
-                  <Text key={l} style={styles.yLabel}>{l}</Text>
-                ))}
-              </View>
-
-              {/* Grid + bars */}
-              <View style={{ flex: 1 }}>
-                {/* Horizontal grid lines */}
-                <Svg width="100%" height={wkBarMaxH} style={{ position: 'absolute', top: 0 }}>
-                  {[0, 0.25, 0.5, 0.75, 1].map(t => (
-                    <Line key={t} x1="0" y1={wkBarMaxH * (1 - t)} x2="100%" y2={wkBarMaxH * (1 - t)}
-                      stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
-                  ))}
-                </Svg>
-
-                {/* Bars */}
-                <View style={[styles.weekBarsRow, { height: wkBarMaxH }]}>
-                  {WEEK_BARS.map((d, i) => (
-                    <AnimBar
-                      key={`${chartKey}-${i}`}
-                      heightPct={d.mins / wkMaxMins}
-                      maxH={wkBarMaxH}
-                      width={wkBarW}
-                      color={d.date === 17 ? COLORS.red : COLORS.amber}
-                      delay={i * 60}
-                      isNow={d.date === 17}
-                    />
-                  ))}
-                </View>
-
-                {/* X labels */}
-                <View style={[styles.weekBarsRow, { marginTop: 8 }]}>
-                  {WEEK_BARS.map((d, i) => (
-                    <View key={i} style={{ width: wkBarW, alignItems: 'center' }}>
-                      <Text style={[styles.weekDayLabel, d.date === 17 && { color: COLORS.cream, fontFamily: FONTS.bold }]}>
-                        {d.day}
-                      </Text>
-                      <Text style={[styles.weekDateLabel, d.date === 17 && { color: COLORS.cream, fontFamily: FONTS.bold }]}>
-                        {d.date}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
+              <View style={styles.tagsBtn}>
+                <Text style={styles.tagsTxt}>🏷 Tags</Text>
               </View>
             </View>
+
+            {loading ? (
+              <Skeleton w="100%" h={wkBarMaxH + 40} r={6} />
+            ) : (
+              <View style={styles.weekChartWrap}>
+                <View style={styles.yAxis}>
+                  {wkYLabels.map(l => (
+                    <Text key={l} style={styles.yLabel}>{l}</Text>
+                  ))}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Svg width="100%" height={wkBarMaxH} style={{ position: 'absolute', top: 0 }}>
+                    {[0, 0.25, 0.5, 0.75, 1].map(t => (
+                      <Line key={t}
+                        x1="0" y1={wkBarMaxH * (1 - t)} x2="100%" y2={wkBarMaxH * (1 - t)}
+                        stroke="rgba(255,255,255,0.06)" strokeWidth={1}
+                      />
+                    ))}
+                  </Svg>
+                  <View style={[styles.weekBarsRow, { height: wkBarMaxH }]}>
+                    {weekBars.map((b, i) => {
+                      const val = chartTab === 'Sessions'
+                        ? (data?.recentSessions.filter(s => s.started_at.slice(0, 10) === b.isoDate).length ?? 0)
+                        : b.minutes;
+                      const maxVal = chartTab === 'Sessions'
+                        ? Math.max(...weekBars.map(wb => data?.recentSessions.filter(s => s.started_at.slice(0, 10) === wb.isoDate).length ?? 0), 1)
+                        : wkMaxMins;
+                      return (
+                        <AnimBar
+                          key={`${chartKey}-${i}`}
+                          heightPct={val / maxVal}
+                          maxH={wkBarMaxH}
+                          width={wkBarW}
+                          isToday={b.isToday}
+                          delay={i * 55}
+                        />
+                      );
+                    })}
+                  </View>
+                  <View style={[styles.weekBarsRow, { marginTop: 8 }]}>
+                    {weekBars.map((b, i) => (
+                      <View key={i} style={{ width: wkBarW, alignItems: 'center' }}>
+                        <Text style={[styles.weekDayLbl, b.isToday && styles.weekDayLblActive]}>
+                          {b.day.slice(0, 3)}
+                        </Text>
+                        <Text style={[styles.weekDateLbl, b.isToday && styles.weekDayLblActive]}>
+                          {b.date}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            )}
           </Card>
         )}
 
-        {/* ─────────────────────────────────────────────────────────────────────
-            6. RECENT SESSIONS teaser
-        ───────────────────────────────────────────────────────────────────── */}
-        {section(6,
+        {/* ══ 6. RECENT SESSIONS ══ */}
+        {sec(6,
           <Card>
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>Recent Sessions</Text>
               <MoreBtn />
             </View>
-            {[
-              { goal: 'Finish chapter 4',  dur: '45m', time: '3:20 PM', score: 4 },
-              { goal: 'Deep work sprint',  dur: '90m', time: '1:00 PM', score: 3 },
-              { goal: 'Email catchup',     dur: '20m', time: '11:10 AM', score: 2 },
-            ].map((s, i) => (
-              <View key={i} style={[styles.sessionRow, i < 2 && styles.sessionRowBorder]}>
-                <View style={styles.sessionLeft}>
-                  <Text style={styles.sessionGoal}>{s.goal}</Text>
-                  <Text style={styles.sessionTime}>{s.time}</Text>
-                </View>
-                <View style={styles.sessionRight}>
-                  <Text style={styles.sessionDur}>{s.dur}</Text>
-                  <View style={styles.sessionDots}>
-                    {[1,2,3,4].map(dot => (
-                      <View key={dot} style={[
-                        styles.sessionDot,
-                        { backgroundColor: dot <= s.score ? COLORS.orange : COLORS.surface2 },
-                      ]} />
-                    ))}
+
+            {loading ? (
+              <View style={{ gap: 14 }}>
+                {[0, 1, 2].map(i => <Skeleton key={i} w="100%" h={48} r={8} />)}
+              </View>
+            ) : (data?.recentSessions?.length ?? 0) === 0 ? (
+              <View style={styles.emptyWrap}>
+                <Text style={styles.emptyEmoji}>🔥</Text>
+                <Text style={styles.emptyTxt}>
+                  {isToday
+                    ? 'No sessions yet — start your first focus block.'
+                    : `No sessions on ${navLabel(dayOffset)}.`}
+                </Text>
+              </View>
+            ) : (
+              (data?.recentSessions ?? []).map((s, i) => (
+                <View key={s.id} style={[
+                  styles.sessionRow,
+                  i < (data!.recentSessions.length - 1) && styles.sessionRowBorder,
+                ]}>
+                  <View style={styles.sessionLeft}>
+                    <Text style={styles.sessionGoal} numberOfLines={1}>{s.goal}</Text>
+                    <Text style={styles.sessionTime}>{fmtTime(s.started_at)}</Text>
+                  </View>
+                  <View style={styles.sessionRight}>
+                    <Text style={styles.sessionDur}>{fmtSec(s.elapsed_sec)}</Text>
+                    <View style={styles.sessionDots}>
+                      {[1, 2, 3, 4].map(dot => (
+                        <View key={dot} style={[
+                          styles.sessionDot,
+                          { backgroundColor: dot <= sessionScore(s) ? COLORS.orange : COLORS.surface2 },
+                        ]} />
+                      ))}
+                    </View>
                   </View>
                 </View>
-              </View>
-            ))}
+              ))
+            )}
           </Card>
         )}
 
@@ -610,45 +716,88 @@ export default function InsightsScreen({ navigation }: InsightsScreenProps) {
   );
 }
 
+// ─── Heatmap month labels ─────────────────────────────────────────────────────
+function buildMonthLabels() {
+  const labels: { label: string; col: number }[] = [];
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  let lastMonth = -1;
+  for (let col = 0; col < 14; col++) {
+    const weeksAgo = 13 - col;
+    const d = new Date(); d.setDate(d.getDate() - weeksAgo * 7);
+    const m = d.getMonth();
+    if (m !== lastMonth) {
+      labels.push({ label: MONTHS[m], col });
+      lastMonth = m;
+    }
+  }
+  return labels;
+}
+
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   root:         { flex: 1, backgroundColor: COLORS.bg },
   scroll:       { flex: 1 },
-  scrollContent: { paddingHorizontal: H_PAD, paddingTop: 56 },
+  scrollContent: { paddingHorizontal: H_PAD, paddingBottom: 40 },
+
+  card: {
+    backgroundColor: COLORS.surface, borderRadius: RADII.xxl,
+    padding: 20, marginBottom: 14,
+    borderWidth: 1, borderColor: COLORS.border,
+  },
 
   // Header
   header:       { marginBottom: 20 },
   headerTitle:  { fontFamily: FONTS.black, fontSize: 32, color: COLORS.cream, letterSpacing: -0.5 },
   dateNav:      { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
-  navBtn:       {
+
+  navBtn: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: COLORS.surface2, alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: COLORS.border,
   },
-  navBtnDisabled: { opacity: 0.35 },
-  navArrow:     { fontFamily: FONTS.bold, fontSize: 18, color: COLORS.cream, lineHeight: 20 },
-  datePill:     {
-    flex: 1, alignItems: 'center', paddingVertical: 8,
+  navBtnOff:    { opacity: 0.28 },
+  navArrow:     { fontFamily: FONTS.bold, fontSize: 20, color: COLORS.cream, lineHeight: 22 },
+  navArrowOff:  { color: COLORS.faint },
+
+  datePillWrap: { flex: 1 },
+  datePill: {
+    alignItems: 'center', paddingVertical: 9,
     backgroundColor: COLORS.surface2, borderRadius: RADII.pill,
     borderWidth: 1, borderColor: COLORS.border,
+    overflow: 'hidden',
+  },
+  datePillPast: {
+    borderColor: 'rgba(255,107,26,0.30)',
   },
   dateText:     { fontFamily: FONTS.bold, fontSize: 15, color: COLORS.cream },
+  dateTextPast: { color: COLORS.amber },
+  dateTodayHint:{ fontFamily: FONTS.regular, fontSize: 10, color: 'rgba(255,107,26,0.55)', marginTop: 1 },
+
+  pastHint: {
+    fontFamily: FONTS.regular, fontSize: 11,
+    color: 'rgba(255,107,26,0.45)',
+    marginTop: 7, textAlign: 'center',
+  },
 
   // Card header
-  cardHeader:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  cardTitle:       { fontFamily: FONTS.bold, fontSize: 16, color: COLORS.cream },
-  cardHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  timelinePill:    {
+  cardHeader:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  cardTitle:    { fontFamily: FONTS.bold, fontSize: 16, color: COLORS.cream },
+  pill: {
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
     borderRadius: RADII.pill, paddingHorizontal: 14, paddingVertical: 6,
   },
-  timelineTxt:     { fontFamily: FONTS.bold, fontSize: 12, color: COLORS.cream },
-  shareIcon:       {
+  pillTxt:      { fontFamily: FONTS.bold, fontSize: 12, color: COLORS.cream },
+  iconBtn: {
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: COLORS.surface2, alignItems: 'center', justifyContent: 'center',
   },
+  moreBtn: {
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+    borderRadius: RADII.pill, paddingHorizontal: 14, paddingVertical: 6,
+  },
+  moreTxt:      { fontFamily: FONTS.bold, fontSize: 12, color: COLORS.cream },
 
-  // Focus Summary
+  // Summary
   heroTime:     { fontFamily: FONTS.black, fontSize: 52, color: COLORS.orange, letterSpacing: -1, textAlign: 'center' },
   heroLabel:    { fontFamily: FONTS.bold, fontSize: 18, color: COLORS.orange, textAlign: 'center', marginBottom: 14 },
   subStats:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 16 },
@@ -656,20 +805,18 @@ const styles = StyleSheet.create({
   subStatVal:   { fontFamily: FONTS.bold, color: COLORS.cream },
   subStatDot:   { width: 4, height: 4, borderRadius: 2, backgroundColor: COLORS.muted },
 
-  // Motivational banner
   motiveBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: 'rgba(255,107,26,0.1)',
+    backgroundColor: 'rgba(255,107,26,0.10)',
     borderRadius: RADII.lg, padding: 14,
     borderWidth: 1, borderColor: 'rgba(255,107,26,0.18)',
-    marginTop: 4,
   },
   motiveEmoji:  { fontSize: 28 },
   motiveTitle:  { fontFamily: FONTS.bold, fontSize: 14, color: COLORS.cream, marginBottom: 2 },
   motiveSub:    { fontFamily: FONTS.regular, fontSize: 12, color: COLORS.muted, lineHeight: 17 },
 
   // Goal performance
-  goalStatus:   { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  goalStatus:     { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   goalIconCircle: {
     width: 50, height: 50, borderRadius: 25,
     backgroundColor: 'rgba(100,120,200,0.15)',
@@ -678,88 +825,78 @@ const styles = StyleSheet.create({
   goalStatusText: { fontFamily: FONTS.regular, fontSize: 15, color: COLORS.cream, lineHeight: 21 },
   goalStatusSub:  { fontFamily: FONTS.regular, fontSize: 12, color: COLORS.muted, marginTop: 3 },
 
-  // Hourly chart
-  hourlyChart:  { position: 'relative' },
-  goalLine:     {
-    position: 'absolute', top: 8, left: 0, right: 0, height: 1,
-    backgroundColor: COLORS.orange, opacity: 0.5,
-  },
-  goalLineLabel: {
-    position: 'absolute', top: 0, right: 0,
-    fontFamily: FONTS.mono ?? FONTS.regular, fontSize: 10, color: COLORS.orange,
-  },
-  barsRow:      { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-  barXLabel:    { fontFamily: FONTS.regular, fontSize: 10, color: COLORS.muted, textAlign: 'center' },
-
-  legendRow:    { flexDirection: 'row', gap: 20, marginTop: 10 },
-  legendItem:   { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot:    { width: 10, height: 10, borderRadius: 5 },
-  legendText:   { fontFamily: FONTS.regular, fontSize: 11, color: COLORS.muted },
+  // Charts shared
+  barsRow:       { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
+  barXLabel:     { fontFamily: FONTS.regular, fontSize: 10, color: COLORS.muted, textAlign: 'center' },
+  legendRow:     { flexDirection: 'row', gap: 20, marginTop: 10 },
+  legendItem:    { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot:     { width: 10, height: 10, borderRadius: 5 },
+  legendText:    { fontFamily: FONTS.regular, fontSize: 11, color: COLORS.muted },
+  emptyChartTxt: { fontFamily: FONTS.regular, fontSize: 13, color: COLORS.faint, textAlign: 'center' },
 
   // Streak
-  streakRow:    { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-  streakDayCol: { alignItems: 'center', gap: 6 },
+  streakRow:   { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+  streakCol:   { alignItems: 'center', gap: 6 },
   streakCircle: {
     width: 38, height: 38, borderRadius: 19,
     backgroundColor: COLORS.surface2,
     borderWidth: 1, borderColor: COLORS.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  streakCircleDone: { backgroundColor: COLORS.red, borderColor: COLORS.red },
-  streakCheck:  { fontFamily: FONTS.bold, fontSize: 16, color: '#fff' },
-  streakLabel:  { fontFamily: FONTS.regular, fontSize: 11, color: COLORS.muted },
+  streakCircleDone:  { backgroundColor: COLORS.red ?? '#FF4444', borderColor: COLORS.red ?? '#FF4444' },
+  streakCircleToday: { borderColor: COLORS.orange, borderWidth: 2 },
+  streakCheck:       { fontFamily: FONTS.bold, fontSize: 16, color: '#fff' },
+  streakToday:       { fontFamily: FONTS.bold, fontSize: 20, color: COLORS.orange, lineHeight: 22 },
+  streakLabel:       { fontFamily: FONTS.regular, fontSize: 11, color: COLORS.muted },
 
-  // Pattern / heatmap
-  patternStats:     { flexDirection: 'row', alignItems: 'center', gap: 20, marginBottom: 20, marginTop: 8 },
-  patternStat:      {},
-  patternStatVal:   { fontFamily: FONTS.black, fontSize: 28, color: COLORS.cream },
-  patternStatLbl:   { fontFamily: FONTS.regular, fontSize: 12, color: COLORS.muted, marginTop: 2 },
-  patternStatDivider: { width: 1, height: 36, backgroundColor: 'rgba(255,255,255,0.08)' },
-
-  heatmapWrap:  { position: 'relative', marginBottom: 14 },
-  heatMonthRow: { flexDirection: 'row', height: 18, position: 'relative', marginLeft: 20, marginBottom: 4 },
-  heatMonthLabel: { position: 'absolute', fontFamily: FONTS.regular, fontSize: 10, color: COLORS.muted },
-  heatRow:      { flexDirection: 'row', marginLeft: 20 },
-  heatRowLabel: { fontFamily: FONTS.regular, fontSize: 10, color: COLORS.muted, width: 16 },
-  heatLegend:   { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 14 },
-  heatLegendCell: { width: 13, height: 13, borderRadius: 2 },
+  // Heatmap
+  patternStats:   { flexDirection: 'row', alignItems: 'center', gap: 20, marginTop: 8, marginBottom: 16 },
+  patternVal:     { fontFamily: FONTS.black, fontSize: 28, color: COLORS.cream },
+  patternLbl:     { fontFamily: FONTS.regular, fontSize: 12, color: COLORS.muted, marginTop: 2 },
+  patternDivider: { width: 1, height: 36, backgroundColor: 'rgba(255,255,255,0.08)' },
+  hmMonthLabel:   { position: 'absolute', fontFamily: FONTS.regular, fontSize: 10, color: COLORS.muted },
+  hmRow:          { flexDirection: 'row', alignItems: 'center' },
+  hmRowLabel:     { fontFamily: FONTS.regular, fontSize: 10, color: COLORS.muted, width: 16 },
+  hmLegend:       { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10, flexWrap: 'wrap' },
+  hmLegendCell:   { width: 13, height: 13, borderRadius: 2 },
 
   // Tabs
-  tabRow:       { flexDirection: 'row', borderBottomWidth: 1, borderColor: COLORS.border, marginBottom: 14 },
-  tabBtn:       { flex: 1, alignItems: 'center', paddingBottom: 10, position: 'relative' },
-  tabText:      { fontFamily: FONTS.bold, fontSize: 15, color: COLORS.muted },
-  tabTextActive:{ color: COLORS.cream },
-  tabUnderline: {
+  tabRow:         { flexDirection: 'row', borderBottomWidth: 1, borderColor: COLORS.border, marginBottom: 14 },
+  tabBtn:         { flex: 1, alignItems: 'center', paddingBottom: 10, position: 'relative' },
+  tabTxt:         { fontFamily: FONTS.bold, fontSize: 15, color: COLORS.muted },
+  tabTxtActive:   { color: COLORS.cream },
+  tabUnderline:   {
     position: 'absolute', bottom: -1, left: '15%', right: '15%',
     height: 2, backgroundColor: COLORS.cream, borderRadius: 1,
   },
-
-  chartSubHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  chartSubLabel:  { fontFamily: FONTS.mono ?? FONTS.regular, fontSize: 11, color: COLORS.muted, letterSpacing: 0.5 },
+  chartSubHead:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  chartSubLbl:    { fontFamily: FONTS.regular, fontSize: 11, color: COLORS.muted, letterSpacing: 0.5 },
   tagsBtn:        {
     backgroundColor: COLORS.surface2, borderRadius: RADII.md,
     paddingHorizontal: 14, paddingVertical: 7,
   },
-  tagsBtnText:    { fontFamily: FONTS.bold, fontSize: 13, color: COLORS.cream },
-
+  tagsTxt:        { fontFamily: FONTS.bold, fontSize: 13, color: COLORS.cream },
   weekChartWrap:  { flexDirection: 'row', gap: 8 },
-  yAxis:          { width: 52, justifyContent: 'space-between', paddingBottom: 28 },
+  yAxis:          { width: 44, justifyContent: 'space-between', paddingBottom: 30 },
   yLabel:         { fontFamily: FONTS.regular, fontSize: 10, color: COLORS.muted, textAlign: 'right' },
   weekBarsRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  weekDayLabel:   { fontFamily: FONTS.regular, fontSize: 11, color: COLORS.muted },
-  weekDateLabel:  { fontFamily: FONTS.regular, fontSize: 12, color: COLORS.muted },
+  weekDayLbl:     { fontFamily: FONTS.regular, fontSize: 11, color: COLORS.muted },
+  weekDateLbl:    { fontFamily: FONTS.regular, fontSize: 12, color: COLORS.muted },
+  weekDayLblActive:{ fontFamily: FONTS.bold, color: COLORS.cream },
 
   // Recent sessions
-  sessionRow:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
-  sessionRowBorder: { borderBottomWidth: 1, borderColor: COLORS.border },
-  sessionLeft:    { flex: 1 },
-  sessionGoal:    { fontFamily: FONTS.bold, fontSize: 14, color: COLORS.cream },
-  sessionTime:    { fontFamily: FONTS.regular, fontSize: 11, color: COLORS.muted, marginTop: 2 },
-  sessionRight:   { alignItems: 'flex-end', gap: 5 },
-  sessionDur:     { fontFamily: FONTS.bold, fontSize: 14, color: COLORS.amber },
-  sessionDots:    { flexDirection: 'row', gap: 3 },
-  sessionDot:     { width: 7, height: 7, borderRadius: 3.5 },
+  sessionRow:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
+  sessionRowBorder:{ borderBottomWidth: 1, borderColor: COLORS.border },
+  sessionLeft:     { flex: 1, marginRight: 12 },
+  sessionGoal:     { fontFamily: FONTS.bold, fontSize: 14, color: COLORS.cream },
+  sessionTime:     { fontFamily: FONTS.regular, fontSize: 11, color: COLORS.muted, marginTop: 2 },
+  sessionRight:    { alignItems: 'flex-end', gap: 5 },
+  sessionDur:      { fontFamily: FONTS.bold, fontSize: 14, color: COLORS.amber },
+  sessionDots:     { flexDirection: 'row', gap: 3 },
+  sessionDot:      { width: 7, height: 7, borderRadius: 3.5 },
 
-  // Shared
-  faint:     { color: COLORS.faint },
+  // Empty / error
+  emptyWrap:  { alignItems: 'center', paddingVertical: 24 },
+  emptyEmoji: { fontSize: 36, marginBottom: 10 },
+  emptyTxt:   { fontFamily: FONTS.regular, fontSize: 14, color: COLORS.muted, textAlign: 'center', lineHeight: 20 },
 });

@@ -16,7 +16,7 @@
  * "End break ›" returns to session, calls completeCheckpoint().
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { use, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -28,6 +28,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useBreakTimer } from '../../../../hooks/useBreakTimer';
 import {
   useFonts,
   Nunito_800ExtraBold,
@@ -42,6 +43,7 @@ import {
   CHECKPOINT_BREAK_SEC,
 } from '../../../../store/sessionStore';
 import { COLORS, FONTS } from '../../../../theme';
+import { BreakStatusBar } from '../../../../components/BreakStatusBar';
 
 const { width } = Dimensions.get('window');
 
@@ -70,6 +72,7 @@ const TOTAL_BREAK_SEC = CHECKPOINT_BREAK_SEC; // 120s
 const CYCLE_DURATION = BREATH_PATTERN.reduce((s, p) => s + p.durationSec, 0); // 14s per cycle
 
 export default function BreathingOrbGame() {
+  useBreakTimer(); // auto-ejects to /session after break time expires
   const insets       = useSafeAreaInsets();
   const sessionTime  = useSessionStore(selectTimeDisplay);
   const completeCheckpoint = useSessionStore(s => s.completeCheckpoint);
@@ -271,18 +274,13 @@ export default function BreathingOrbGame() {
             <Text style={styles.topBarIcon}>🔥</Text>
             <Text style={styles.topBarLabel}>BREATHING ORB</Text>
           </View>
-          <TouchableOpacity style={styles.endBtn} onPress={handleEnd} activeOpacity={0.75}>
-            <Text style={styles.endBtnText}>End break ›</Text>
+          <TouchableOpacity style={styles.endBtn} onPress={()=>router.back()} activeOpacity={0.75}>
+            <Text style={styles.endBtnText}>← Games</Text>
           </TouchableOpacity>
         </View>
 
         {/* ── Session running pill ── */}
-        <View style={styles.sessionPill}>
-          <View style={styles.sessionDot} />
-          <Text style={styles.sessionPillText}>Session running</Text>
-          <Text style={styles.sessionPillTime}>{sessionTime}</Text>
-        </View>
-
+        <BreakStatusBar />
         {/* ── Orb area ── */}
         <View style={styles.orbArea}>
 
@@ -329,24 +327,7 @@ export default function BreathingOrbGame() {
         </View>
 
         {/* ── Break time bar ── */}
-        <View style={styles.breakBarSection}>
-          <View style={styles.breakBarRow}>
-            <Text style={styles.breakBarLabel}>break time</Text>
-            <Text style={styles.breakBarTime}>{breakMM}:{breakSS} left</Text>
-          </View>
-          <View style={styles.breakBarTrack}>
-            <LinearGradient
-              colors={['#FF6B1A', '#FFD166']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={[
-                styles.breakBarFill,
-                { width: `${Math.round(breakBarPct * 100)}%` as `${number}%` },
-              ]}
-            />
-          </View>
-        </View>
-
+        
       </Animated.View>
     </View>
   );

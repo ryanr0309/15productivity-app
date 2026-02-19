@@ -9,57 +9,53 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { SplashScreen, Stack, router, useRouter } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { rehydrateSession } from '../store/sessionStore';
 import React from 'react';
+import { hasCompletedOnboarding } from '../store/onboardingStore';
+import Purchases from 'react-native-purchases';
+
+
 
 export default function RootLayout() {
-  // null  = still checking storage
-  // true  = active session found, need to redirect
-  // false = no session, show normal app
-  const [sessionStatus, setSessionStatus] = useState<boolean | null>(null);
-  const hasNavigated = useRef(false);
+  const router = useRouter();
+  const [ready, setReady] = useState(false);
 
-  // Step 1: check AsyncStorage (no navigation here)
   useEffect(() => {
-    rehydrateSession().then(hadSession => {
-      setSessionStatus(hadSession);
-    });
+    async function bootstrap() {
+      // 1. Check onboarding
+      Purchases.configure({ apiKey: 'appl_oAPrSJxAenzObkBRjVsJJlnudRM' });
+      const onboarded = await hasCompletedOnboarding();
+
+      if (!onboarded) {
+        // First-time user → onboarding
+        router.replace('/(onboarding)');
+        setReady(true);
+        return;
+      }
+
+      // 2. Returning user — check for live session
+      const hadSession = await rehydrateSession();
+      if (hadSession) {
+        router.replace('/session');
+      } else {
+        router.replace('/(protected)/(tabs)');
+      }
+
+      setReady(true);
+    }
+    bootstrap();
   }, []);
 
-  // Step 2: navigate only after Stack is rendered and router is ready
-  useEffect(() => {
-    if (sessionStatus === true && !hasNavigated.current) {
-      hasNavigated.current = true;
-      // Small timeout ensures the Stack navigator has fully mounted
-      setTimeout(() => {
-        router.replace('/session');
-      }, 50);
-    }
-  }, [sessionStatus]);
+  if (!ready){
+    console.log("not ready")
+  };   // your splash/loading component
 
   return (
-    <SafeAreaProvider>
-      {/* Always render the Stack so the router is ready */}
-      <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />
-
-      {/* Overlay a splash screen while we're checking — sits ON TOP of Stack */}
-      {sessionStatus === null && (
-        <View style={styles.splash}>
-          <ActivityIndicator color="#FF6B1A" size="large" />
-        </View>
-      )}
-    </SafeAreaProvider>
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(onboarding)" />
+      <Stack.Screen name="(protected)" />
+    </Stack>
   );
 }
-
-const styles = StyleSheet.create({
-  splash: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#0A0603',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 999,
-  },
-});

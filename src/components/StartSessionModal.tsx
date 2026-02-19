@@ -40,10 +40,10 @@ const { height: SH, width: SW } = Dimensions.get('window');
 
 // ─── Duration presets ─────────────────────────────────────────────────────────
 const PRESETS = [
-  { label: '25m', mins: 25 },
-  { label: '45m', mins: 45 },
+  { label: '30m', mins: 30 },
   { label: '60m', mins: 60 },
   { label: '90m', mins: 90 },
+  { label: '120m', mins: 120 },
 ] as const;
 
 // ─── Goal suggestions (shown as quick-tap chips) ──────────────────────────────
@@ -79,7 +79,7 @@ export default function StartSessionModal({ visible, onClose }: Props) {
   useEffect(() => {
     if (visible) {
       setGoal('');
-      setDurationMins(25);
+      setDurationMins(60);
       setGoalError(false);
 
       Animated.parallel([
@@ -298,7 +298,7 @@ interface SliderProps { value: number; onChange: (v: number) => void; }
 
 function DurationSlider({ value, onChange }: SliderProps) {
   const TRACK_W  = SW - 56;   // matches sheet padding
-  const MIN_MINS = 5;
+  const MIN_MINS = 30;
   const MAX_MINS = 120;
   const pct      = (value - MIN_MINS) / (MAX_MINS - MIN_MINS);
   const thumbX   = pct * TRACK_W;
@@ -342,7 +342,7 @@ function DurationSlider({ value, onChange }: SliderProps) {
 
       {/* Labels */}
       <View style={sliderStyles.labels}>
-        <Text style={sliderStyles.labelText}>5m</Text>
+        <Text style={sliderStyles.labelText}>30m</Text>
         <Text style={[sliderStyles.labelText, sliderStyles.labelValue]}>{value}m</Text>
         <Text style={sliderStyles.labelText}>2h</Text>
       </View>

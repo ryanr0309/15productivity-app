@@ -80,9 +80,7 @@ export default function HomeScreen() {
       <View style={styles.bloom} />
 
       {/* "01 · HOME" */}
-      <Animated.View style={[styles.topLabel, { opacity: fadeIn, paddingTop: insets.top + 12 }]}>
-        <Text style={styles.topLabelText}>01  ·  HOME</Text>
-      </Animated.View>
+    
 
       {/* Main content */}
       <Animated.View style={[styles.content, { opacity: fadeIn, transform: [{ scale: scaleIn }] }]}>

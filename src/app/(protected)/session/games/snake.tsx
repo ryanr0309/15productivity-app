@@ -37,6 +37,8 @@ import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSessionStore, selectTimeDisplay } from '../../../../store/sessionStore';
 import { COLORS, FONTS } from '../../../../theme';
+import { useBreakTimer } from '../../../../hooks/useBreakTimer';
+import { BreakStatusBar } from '../../../../components/BreakStatusBar';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -70,6 +72,7 @@ const INIT_SNAKE: Cell[] = [
 ];
 
 export default function SnakeGame() {
+    useBreakTimer(); // auto-ejects to /session after break time expires
   const insets      = useSafeAreaInsets();
   const sessionTime = useSessionStore(selectTimeDisplay);
   const completeCheckpoint = useSessionStore(s => s.completeCheckpoint);
@@ -189,21 +192,7 @@ export default function SnakeGame() {
   }, [bumpScore, triggerFlash]);
 
   // ── Game timer ─────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const tick = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) { clearInterval(tick); handleEnd(); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(tick);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
-  const handleEnd = useCallback(async () => {
-    await completeCheckpoint();
-    router.replace('/session');
-  }, [completeCheckpoint]);
 
   // ── Swipe detection ────────────────────────────────────────────────────────
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
@@ -257,11 +246,12 @@ export default function SnakeGame() {
             <Text style={styles.topBarIcon}>🐍</Text>
             <Text style={styles.topBarLabel}>SNAKE</Text>
           </View>
-          <TouchableOpacity style={styles.endBtn} onPress={handleEnd} activeOpacity={0.75}>
-            <Text style={styles.endBtnText}>End break ›</Text>
+          <TouchableOpacity style={styles.endBtn} onPress={()=>router.back()} activeOpacity={0.75}>
+            <Text style={styles.endBtnText}>← Games</Text>
           </TouchableOpacity>
         </View>
 
+<BreakStatusBar />
         {/* ── Score + time row ── */}
         <View style={styles.statsRow}>
           <View>
@@ -270,14 +260,8 @@ export default function SnakeGame() {
               {score}
             </Animated.Text>
           </View>
-          <View style={styles.sessionPill}>
-            <View style={styles.sessionDot} />
-            <Text style={styles.sessionTime}>{sessionTime}</Text>
-          </View>
-          <View style={{ alignItems: 'flex-end' }}>
-            <Text style={styles.statSubLabel}>TIME</Text>
-            <Text style={styles.timeVal}>{timeMM}:{timeSS}</Text>
-          </View>
+  
+        
         </View>
 
         {/* ── Arena ── */}

@@ -158,7 +158,7 @@ export default function SessionScreen() {
         <View style={styles.bgBloom} />
 
         <Animated.View style={[styles.content, { opacity: fadeIn, paddingTop: insets.top + 20 }]}>
-          <Text style={styles.screenLabel}>02  ·  SESSION ACTIVE</Text>
+          <Text style={styles.screenLabel}>SESSION ACTIVE</Text>
 
           {/* ── Ring + mascot ── */}
           <View style={[styles.ringWrap, { width: RING_SIZE, height: RING_SIZE }]}>
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
   cpBtnArrow:     { fontFamily: FONTS.bold, fontSize: 22, color: 'rgba(26,8,0,0.45)' },
 
   // Exit hatch
-  exitSection:    { width: '100%', alignItems: 'center', marginTop: 'auto', paddingBottom: 12 },
+  exitSection:    { width: '100%', alignItems: 'center', marginTop: 'auto', paddingBottom: 48 },
   inputBox:       { width: '100%', flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1.5, borderColor: 'rgba(180,80,20,0.35)', backgroundColor: 'rgba(22,10,4,0.55)', paddingHorizontal: 16, marginBottom: 10 },
   inputBoxReady:  { borderColor: 'rgba(80,200,120,0.45)', backgroundColor: 'rgba(12,28,14,0.45)' },
   exitInput:      { flex: 1, fontFamily: FONTS.regular, fontSize: 14, color: 'rgba(255,200,100,0.72)', letterSpacing: 0.5, paddingVertical: 17, textAlign: 'center' },
