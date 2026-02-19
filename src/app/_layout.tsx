@@ -13,7 +13,7 @@ import { SplashScreen, Stack, router, useRouter } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { rehydrateSession } from '../store/sessionStore';
 import React from 'react';
-import { hasCompletedOnboarding } from '../store/onboardingStore';
+import { hasCompletedOnboarding, useOnboardingStore } from '../store/onboardingStore';
 import Purchases from 'react-native-purchases';
 
 
@@ -21,6 +21,9 @@ import Purchases from 'react-native-purchases';
 export default function RootLayout() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
+
+  const { loadScreenTimeSelectionId } = useOnboardingStore();
+useEffect(() => { loadScreenTimeSelectionId(); }, []);
 
   useEffect(() => {
     async function bootstrap() {
