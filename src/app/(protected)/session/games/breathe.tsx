@@ -16,7 +16,7 @@
  * "End break ›" returns to session, calls completeCheckpoint().
  */
 
-import React, { use, useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -28,7 +28,6 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useBreakTimer } from '../../../../hooks/useBreakTimer';
 import {
   useFonts,
   Nunito_800ExtraBold,
@@ -43,6 +42,7 @@ import {
   CHECKPOINT_BREAK_SEC,
 } from '../../../../store/sessionStore';
 import { COLORS, FONTS } from '../../../../theme';
+import { useBreakTimer } from '../../../../hooks/useBreakTimer';
 import { BreakStatusBar } from '../../../../components/BreakStatusBar';
 
 const { width } = Dimensions.get('window');
@@ -72,11 +72,10 @@ const TOTAL_BREAK_SEC = CHECKPOINT_BREAK_SEC; // 120s
 const CYCLE_DURATION = BREATH_PATTERN.reduce((s, p) => s + p.durationSec, 0); // 14s per cycle
 
 export default function BreathingOrbGame() {
-  useBreakTimer(); // auto-ejects to /session after break time expires
   const insets       = useSafeAreaInsets();
   const sessionTime  = useSessionStore(selectTimeDisplay);
   const completeCheckpoint = useSessionStore(s => s.completeCheckpoint);
-
+  useBreakTimer()
   const [fontsLoaded] = useFonts({
     Nunito_800ExtraBold,
     Nunito_700Bold,
@@ -199,37 +198,8 @@ export default function BreathingOrbGame() {
   }, [phaseIndex, finished]);
 
   // ── Break bar countdown ────────────────────────────────────────────────────
-  useEffect(() => {
-    if (finished) return;
-
-    const tick = setInterval(() => {
-      setBreakElapsed(prev => {
-        const next = prev + 1;
-        if (next >= TOTAL_BREAK_SEC) {
-          clearInterval(tick);
-          handleEnd();
-        }
-        return next;
-      });
-    }, 1000);
-
-    return () => clearInterval(tick);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finished]);
 
   // ── When breathing finishes early, freeze the counter ────────────────────
-  useEffect(() => {
-    if (finished) {
-      setTimeout(handleEnd, 1200);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finished]);
-
-  // ── End break ─────────────────────────────────────────────────────────────
-  const handleEnd = useCallback(async () => {
-    await completeCheckpoint();
-    router.replace('/session');
-  }, [completeCheckpoint]);
 
   // ── Derived display ────────────────────────────────────────────────────────
   const breakRemaining  = Math.max(TOTAL_BREAK_SEC - breakElapsed, 0);
@@ -281,6 +251,7 @@ export default function BreathingOrbGame() {
 
         {/* ── Session running pill ── */}
         <BreakStatusBar />
+
         {/* ── Orb area ── */}
         <View style={styles.orbArea}>
 
@@ -327,7 +298,8 @@ export default function BreathingOrbGame() {
         </View>
 
         {/* ── Break time bar ── */}
-        
+       
+
       </Animated.View>
     </View>
   );
@@ -371,6 +343,7 @@ const styles = StyleSheet.create({
     justifyContent:  'space-between',
     width:           '100%',
     marginBottom:    18,
+    zIndex:          100,
   },
   topBarLeft: {
     flexDirection: 'row',

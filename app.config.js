@@ -15,13 +15,15 @@ export default {
     platforms: ['ios'],
     ios: {
       bundleIdentifier: BUNDLE_ID,
+      buildNumber: '15',
       deploymentTarget: '16.0',  // FamilyControls needs 16+ for full feature set
       appleTeamId: TEAM_ID,
       infoPlist: {
         NSFamilyControlsUsageDescription:
           'Ember uses Screen Time to block distracting apps during your focus sessions.',
         CFBundleURLTypes: [{ CFBundleURLSchemes: ['fifteen'] }],
-        CFBundleURLName: BUNDLE_ID
+        CFBundleURLName: BUNDLE_ID,
+         ITSAppUsesNonExemptEncryption: false
       },
       entitlements: {
         // ── The entitlement Apple approved ──
@@ -34,13 +36,7 @@ export default {
 
     plugins: [
       // ── 1. Raise iOS deployment target for all pods ──
-      [
-        'expo-build-properties',
-        {
-          ios: { deploymentTarget: '16.0' },
-        },
-      ],
-
+       ["expo-build-properties", {}],
       // ── 2. react-native-device-activity ──
       // This plugin does the heavy lifting:
       //   • Injects FamilyControls entitlement into the main target

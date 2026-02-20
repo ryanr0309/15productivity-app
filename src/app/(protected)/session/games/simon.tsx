@@ -43,6 +43,7 @@ import * as Haptics from 'expo-haptics';
 import { useSessionStore, selectTimeDisplay } from '../../../../store/sessionStore';
 import { COLORS, FONTS } from '../../../../theme';
 import { BreakStatusBar } from '../../../../components/BreakStatusBar';
+import { useBreakTimer } from '../../../../hooks/useBreakTimer';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -63,7 +64,7 @@ const PADS: Pad[] = [
   { id: 3, label: '■', color: '#2A1A00', lit: '#FFAA33', glow: '#FF8800', haptic: 'medium'  },
 ];
 
-const TOTAL_ROUNDS   = 10;
+const TOTAL_ROUNDS   = 15;
 const BASE_STEP_MS   = 700;   // flash duration per step at level 1
 const BASE_GAP_MS    = 250;   // gap between steps
 const SPEED_FACTOR   = 0.88;  // multiplied per round (gets faster)
@@ -71,6 +72,7 @@ const SPEED_FACTOR   = 0.88;  // multiplied per round (gets faster)
 type Phase = 'watching' | 'input' | 'error' | 'complete' | 'starting';
 
 export default function SimonSaysGame() {
+  useBreakTimer(); // auto-ejects to /session after break time expires
   const insets      = useSafeAreaInsets();
   const sessionTime = useSessionStore(selectTimeDisplay);
   const completeCheckpoint = useSessionStore(s => s.completeCheckpoint);

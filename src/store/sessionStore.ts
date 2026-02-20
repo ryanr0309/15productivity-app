@@ -5,11 +5,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { saveSession } from '../services/sessionService';
-import { hasStoredSelection, startBlocking, stopBlocking } from '../services/screenTimeService';
+import { startBlocking, stopBlocking } from '../services/screenTimeService';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-export const CHECKPOINT_INTERVAL_SEC = 3 * 60;
-export const CHECKPOINT_BREAK_SEC    = 120;
+export const CHECKPOINT_INTERVAL_SEC = 25 * 60;
+export const CHECKPOINT_BREAK_SEC    = 5 * 60;
 
 const STORAGE_KEY = 'ember_session_v1';
 
@@ -90,9 +90,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     // constant internally, which was set via saveSelectionToken() in the
     // screen-time onboarding screen.
     if (screenTimeSelectionId) {
-      console.log('[Ember] startBlocking called, hasSelection:', hasStoredSelection());
-      await startBlocking(durationSec);
-      
+      await startBlocking(durationSec, goal);
     }
 
     const startedAt        = Date.now();
@@ -116,6 +114,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     await stopBlocking();
     stopInterval();
     const s = get();
+    console.log('[Ember] stopSession saving:', {
+      goal:        s.goal,
+      startedAt:   s.startedAt,
+      startedAtDate: s.startedAt ? new Date(s.startedAt).toISOString() : 'NULL',
+      elapsed:     s.elapsed,
+      durationSec: s.durationSec,
+      checkpoints: s.checkpointsTaken,
+    });
     await saveSession({
       goal:         s.goal,
       startedAt:    s.startedAt!,
@@ -156,9 +162,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   completeCheckpoint: async () => {
     const s = get();
+    // Next checkpoint is CHECKPOINT_INTERVAL_SEC from the moment this one is completed,
+    // not from when it was due. So if user takes it late, next is still 25min from now.
     const newNext  = s.elapsed + CHECKPOINT_INTERVAL_SEC;
     const newTaken = s.checkpointsTaken + 1;
-    set({ nextCheckpointAt: newNext, checkpointsTaken: newTaken, breakStartedAt: null });
+    set({ nextCheckpointAt: newNext, checkpointsTaken: newTaken, breakStartedAt: null , checkpointReady: false });
     if (s.startedAt !== null) {
       await persist({
         goal:             s.goal,
@@ -179,9 +187,20 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       stopInterval();
       set({ elapsed: durationSec, isRunning: false, checkpointReady: false });
       clearPersisted();
+      // Session ended naturally — unblock apps and save to Supabase
+      const s = get();
+      stopBlocking().catch(e => console.warn('[Ember] stopBlocking error:', e));
+      saveSession({
+        goal:         s.goal,
+        startedAt:    s.startedAt!,
+        elapsed:      durationSec,
+        durationSec:  s.durationSec,
+        wasCompleted: true,
+        checkpoints:  s.checkpointsTaken,
+      }).catch(e => console.warn('[Ember] saveSession error:', e));
       return;
     }
-    set({ elapsed, checkpointReady: checkpointReady || elapsed >= nextCheckpointAt });
+    set({ elapsed, checkpointReady: false || elapsed >= nextCheckpointAt });
   },
 }));
 
@@ -192,7 +211,12 @@ export async function rehydrateSession(): Promise<boolean> {
     if (!raw) return false;
     const saved: PersistedSession = JSON.parse(raw);
     const elapsed = Math.floor((Date.now() - saved.startedAt) / 1000);
-    if (elapsed >= saved.durationSec) { await clearPersisted(); return false; }
+     if (elapsed >= saved.durationSec) {
+      await clearPersisted();
+      // Session expired while app was closed — clean up blocking safely on main thread
+      await stopBlocking();
+      return false;
+    }
     useSessionStore.setState({
       goal:             saved.goal,
       durationSec:      saved.durationSec,
@@ -240,3 +264,4 @@ export const selectBreakRemaining = (s: SessionState): number => {
   const elapsed = Math.floor((Date.now() - s.breakStartedAt) / 1000);
   return Math.max(CHECKPOINT_BREAK_SEC - elapsed, 0);
 };
+0

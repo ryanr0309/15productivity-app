@@ -324,8 +324,8 @@ export default function HomeScreen() {
       ]}>
 
         {/* ── Animated flame — sits above ember. wordmark ── */}
-        <AnimatedFlame floatAnim={floatAnim} glowAnim={glowAnim} />
-
+     
+        
         {/* ember. */}
         <Text style={styles.appName}>ember.</Text>
         <Text style={styles.tagline}>Focus burns brighter</Text>

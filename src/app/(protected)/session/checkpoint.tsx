@@ -124,7 +124,7 @@ export default function CheckpointScreen() {
         {/* Header */}
         <Text style={styles.eyebrow}>CHECKPOINT BREAK</Text>
         <Text style={styles.title}>Nice work! 🔥</Text>
-        <Text style={styles.sub}>Take 2 minutes to reset your brain</Text>
+        <Text style={styles.sub}>Take 5 minutes to reset your brain</Text>
 
         {/* Session pill */}
         <View style={styles.sessionPill}>

@@ -32,7 +32,7 @@ import { useOnboardingStore } from '../store/onboardingStore';
 import { activitySelectionMetadata } from 'react-native-device-activity';
 
 const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
-const SHEET_H = SCREEN_H * 0.80; // tall enough for the native picker to be comfortable
+const SHEET_H = SCREEN_H * 0.85; // tall enough for the native picker to be comfortable
 
 interface Props {
   visible:  boolean;
@@ -58,9 +58,12 @@ export default function AppBlockerSheet({ visible, onClose }: Props) {
 
   useEffect(() => {
     if (visible) {
-      // Check auth on open
-      const status = getAuthorizationStatus();
-      setNeedsAuth(status !== 'approved');
+      // Use requestScreenTimeAuthorization which polls the real status from iOS.
+      // getAuthorizationStatus() reads stale in-memory state and can return
+      // 'notDetermined' even when permission is already granted after a cold launch.
+      requestScreenTimeAuthorization().then(status => {
+        setNeedsAuth(status !== 'approved');
+      });
 
       // Load the stored token so DeviceActivitySelectionView shows existing selection.
       // getFamilyActivitySelectionId returns the raw token string iOS needs.
@@ -172,13 +175,7 @@ export default function AppBlockerSheet({ visible, onClose }: Props) {
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>Blocked Apps</Text>
-            <Text style={styles.subtitle}>
-              {hasSelection && appCount !== null && appCount > 0
-                ? `${appCount} app${appCount === 1 ? '' : 's'} blocked during focus`
-                : hasSelection
-                ? 'Selection saved — tap to change'
-                : 'Choose apps to block during sessions'}
-            </Text>
+            
           </View>
 
           {hasSelection && (

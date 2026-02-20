@@ -50,13 +50,13 @@ import { BreakStatusBar } from '../../../../components/BreakStatusBar';
 const { width: SW } = Dimensions.get('window');
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
-const ARENA_H        = Math.round(SW * 0.78);
+const ARENA_H        = Math.round(SW * 1);
 const ARENA_W        = SW - 40;
 const BLOCK_H        = 24;
 const BLOCK_GAP      = 3;          // vertical gap between blocks
 const INITIAL_W      = Math.round(ARENA_W * 0.55);
 const PERFECT_THRESH = 8;          // px overlap tolerance for "perfect"
-const TOTAL_DROPS    = 10;
+const TOTAL_DROPS    = 13;
 const BASE_SPEED_MS  = 1600;       // ms for one full traversal at drop 1
 const SPEED_STEP_MS  = 140;        // gets faster each drop
 

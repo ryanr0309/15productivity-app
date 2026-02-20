@@ -47,6 +47,7 @@ import {
 import { useSessionStore, selectTimeDisplay } from '../../../store/sessionStore';
 import { COLORS, FONTS } from '../../../theme';
 import { BreakStatusBar } from '../../../components/BreakStatusBar';
+import { useBreakTimer } from '../../../hooks/useBreakTimer';
 
 const { width } = Dimensions.get('window');
 
@@ -117,7 +118,7 @@ const GAMES = [
     tagStyle: 'reward',
     route:    '/session/games/snake',
     featured: false,
-    barColors:['#44AA77', '#66DD99'] as [string, string],
+    barColors:['#7755CC', '#BB99FF'] as [string, string],
   },
   {
     id:       'clean',
@@ -142,6 +143,7 @@ const TAG_STYLES: Record<string, { bg: string; color: string; border: string }> 
 };
 
 export default function GameSelectScreen() {
+  useBreakTimer(); // auto-ejects to /session after break time expires
   const insets     = useSafeAreaInsets();
   const timeDisplay = useSessionStore(selectTimeDisplay);
 

@@ -8,13 +8,14 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet, Linking, AppState } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Linking } from 'react-native';
 import { SplashScreen, Stack, router, useRouter } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { rehydrateSession, useSessionStore } from '../store/sessionStore';
 import React from 'react';
 import { hasCompletedOnboarding, hasSeenScreenTimePrompt, useOnboardingStore } from '../store/onboardingStore';
 import Purchases from 'react-native-purchases';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
 
@@ -24,24 +25,19 @@ export default function RootLayout() {
 
   const { loadScreenTimeSelectionId } = useOnboardingStore();
 
- useEffect(() => {
-     const isRunning = useSessionStore.getState().isRunning;
-  console.log('[Ember] AppState active, isRunning:', isRunning);
-  console.log('[Ember] attempting router.replace /session');
-  if (isRunning) {
-    router.replace('/session');
-    console.log('[Ember] router.replace called');
-  }
-  }, []);
-
-  
 useEffect(() => { loadScreenTimeSelectionId(); }, []);
 
 
   useEffect(() => {
     async function bootstrap() {
+      await AsyncStorage.multiRemove([
+  'ember_session_v1',
+  'ember_onboarding_complete',
+  'ember_screen_time_selection_id',
+  'ember_screen_time_seen',
+]);
       // 1. Check onboarding
-      Purchases.configure({ apiKey: 'appl_oAPrSJxAenzObkBRjVsJJlnudRM' });
+      Purchases.configure({ apiKey: 'appl_oAPrSJxAenzObkBRjVsJJlnudRM'});
       const [onboarded, seenScreenTime] = await Promise.all([
   hasCompletedOnboarding(),
   hasSeenScreenTimePrompt(),

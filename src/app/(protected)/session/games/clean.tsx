@@ -52,7 +52,7 @@ const { width: SW } = Dimensions.get('window');
 
 // ─── Grid constants ────────────────────────────────────────────────────────────
 const CANVAS_W  = SW - 40;
-const CANVAS_H  = Math.round(CANVAS_W * 1.15);
+const CANVAS_H  = Math.round(CANVAS_W * 1.4);
 const COLS      = 28;
 const ROWS      = Math.round(COLS * (CANVAS_H / CANVAS_W));
 const CELL_W    = CANVAS_W / COLS;

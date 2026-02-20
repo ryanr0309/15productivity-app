@@ -56,6 +56,9 @@ const SUGGESTIONS = [
   'code review',
 ];
 
+const GOAL_MIN = 3;
+const GOAL_MAX = 60;
+
 interface Props {
   visible:  boolean;
   onClose:  () => void;
@@ -79,7 +82,7 @@ export default function StartSessionModal({ visible, onClose }: Props) {
   useEffect(() => {
     if (visible) {
       setGoal('');
-      setDurationMins(60);
+      setDurationMins(30);
       setGoalError(false);
 
       Animated.parallel([
@@ -122,13 +125,14 @@ export default function StartSessionModal({ visible, onClose }: Props) {
   // ── Confirm ────────────────────────────────────────────────────────────────
   const handleConfirm = () => {
     const trimmed = goal.trim();
-    if (!trimmed) { shakeInput(); return; }
+    if (trimmed.length < GOAL_MIN) { shakeInput(); return; }
+    if (trimmed.length > GOAL_MAX) { shakeInput(); return; }
 
     onClose();
     // Small delay so the sheet animates out before push
     setTimeout(() => {
       startSession(trimmed, durationMins * 60);
-      router.push('/(protected)/session');
+      router.push('/session');
     }, 240);
   };
 
@@ -186,10 +190,9 @@ export default function StartSessionModal({ visible, onClose }: Props) {
               placeholderTextColor="rgba(255,170,80,0.28)"
               value={goal}
               onChangeText={t => { setGoal(t); setGoalError(false); }}
-              onSubmitEditing={handleConfirm}
               autoCapitalize="none"
               autoCorrect={false}
-              returnKeyType="done"
+              returnKeyType="default"
               maxLength={60}
             />
             {goal.length > 0 && (
@@ -199,7 +202,7 @@ export default function StartSessionModal({ visible, onClose }: Props) {
             )}
           </Animated.View>
           {goalError && (
-            <Text style={styles.errorText}>Enter a goal to keep you focused 🔥</Text>
+            <Text style={styles.errorText}>{goal.trim().length === 0 ? 'Enter a goal to keep you focused 🔥' : goal.trim().length < GOAL_MIN ? `At least ${GOAL_MIN} characters` : `Max ${GOAL_MAX} characters`}</Text>
           )}
 
           {/* ── Goal suggestions ── */}
@@ -259,7 +262,7 @@ export default function StartSessionModal({ visible, onClose }: Props) {
             <View style={styles.previewPill}>
               <Text style={styles.previewEmoji}>🏁</Text>
               <Text style={styles.previewText}>
-                {Math.floor(durationMins / 30)} checkpoint{Math.floor(durationMins / 30) !== 1 ? 's' : ''}
+                {Math.floor(durationMins / 25.01)} checkpoint{Math.floor(durationMins / 25.01) !== 1 ? 's' : ''}
               </Text>
             </View>
             <View style={styles.previewPill}>
@@ -298,7 +301,7 @@ interface SliderProps { value: number; onChange: (v: number) => void; }
 
 function DurationSlider({ value, onChange }: SliderProps) {
   const TRACK_W  = SW - 56;   // matches sheet padding
-  const MIN_MINS = 30;
+  const MIN_MINS = 5;
   const MAX_MINS = 120;
   const pct      = (value - MIN_MINS) / (MAX_MINS - MIN_MINS);
   const thumbX   = pct * TRACK_W;
@@ -342,7 +345,7 @@ function DurationSlider({ value, onChange }: SliderProps) {
 
       {/* Labels */}
       <View style={sliderStyles.labels}>
-        <Text style={sliderStyles.labelText}>30m</Text>
+        <Text style={sliderStyles.labelText}>5m</Text>
         <Text style={[sliderStyles.labelText, sliderStyles.labelValue]}>{value}m</Text>
         <Text style={sliderStyles.labelText}>2h</Text>
       </View>
