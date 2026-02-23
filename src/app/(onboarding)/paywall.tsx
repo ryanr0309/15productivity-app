@@ -1,14 +1,9 @@
 /**
  * app/onboarding/paywall.tsx  — Screen 14: Paywall
  *
- * On successful purchase or restore:
- *   1. completeOnboarding() — marks quiz/paywall as done forever
- *   2. Navigate to /(onboarding)/screen-time — not home. The user
- *      sets up app blocking immediately after paying.
- *
- * _layout.tsx handles returning users:
- *   onboarded=true + seenScreenTime=false  → /(onboarding)/screen-time
- *   onboarded=true + seenScreenTime=true   → /(tabs)/home
+ * FIX: RevenueCat throws "no singleton instance" if Purchases.configure()
+ * hasn't completed before presentPaywall() is called. Added waitForRC()
+ * which retries getCustomerInfo() until RC is ready before proceeding.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -41,6 +36,8 @@ const FEATURES = [
   { icon: '🔕', text: 'Smart distraction blocking' },
 ];
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 async function checkEntitlement(): Promise<boolean> {
   try {
     const info = await Purchases.getCustomerInfo();
@@ -50,13 +47,42 @@ async function checkEntitlement(): Promise<boolean> {
   }
 }
 
-// ── Single exit point for all successful purchase paths ───────────────────────
-// Always goes to screen-time next so the user can set up blocking immediately.
-// On future cold starts, _layout.tsx skips screen-time if already seen.
+/**
+ * Poll until Purchases is configured and responsive.
+ * Retries up to maxAttempts times with a delay between each.
+ * Returns true when ready, false if it times out.
+ */
+async function waitForRC(maxAttempts = 10, delayMs = 300): Promise<boolean> {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      await Purchases.getCustomerInfo(); // throws if not configured
+      return true;
+    } catch (e: any) {
+      // "no singleton instance" means not configured yet — keep waiting
+      const isUninitialised =
+        e?.message?.toLowerCase().includes('singleton') ||
+        e?.message?.toLowerCase().includes('configure') ||
+        e?.code === 'PURCHASES_NOT_CONFIGURED';
+
+      if (!isUninitialised) {
+        // A real error (network etc.) — RC is configured, proceed
+        return true;
+      }
+
+      if (i < maxAttempts - 1) {
+        await new Promise(res => setTimeout(res, delayMs));
+      }
+    }
+  }
+  return false;
+}
+
 async function onPurchaseSuccess(completeOnboarding: () => Promise<void>) {
   await completeOnboarding();
   router.replace('/(onboarding)/screentime');
 }
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
@@ -70,6 +96,7 @@ export default function PaywallScreen() {
 
   const [loading,    setLoading]    = useState(false);
   const [presenting, setPresenting] = useState(false);
+  const [rcReady,    setRcReady]    = useState(false);
 
   const contentA = useRef(new Animated.Value(0)).current;
   const contentY = useRef(new Animated.Value(20)).current;
@@ -77,6 +104,7 @@ export default function PaywallScreen() {
   const ctaY     = useRef(new Animated.Value(14)).current;
 
   useEffect(() => {
+    // Run entrance animations
     Animated.sequence([
       Animated.delay(200),
       Animated.parallel([
@@ -93,14 +121,34 @@ export default function PaywallScreen() {
       ]),
     ]).start();
 
-    const timer = setTimeout(() => presentRCPaywall(), 800);
-    return () => clearTimeout(timer);
+    // Wait for RC to be ready, then auto-present the paywall
+    let cancelled = false;
+    (async () => {
+      const ready = await waitForRC();
+      if (cancelled) return;
+      setRcReady(ready);
+      if (ready) {
+        presentRCPaywall();
+      } else {
+        console.warn('RevenueCat did not initialise in time — showing fallback UI');
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, []);
 
   const presentRCPaywall = async () => {
     if (presenting) return;
     setPresenting(true);
     try {
+      // Double-check RC is ready — catches edge cases where rcReady
+      // state hasn't propagated but the function is called directly
+      const ready = await waitForRC(5, 200);
+      if (!ready) {
+        Alert.alert('Not ready', 'Please wait a moment and try again.');
+        return;
+      }
+
       const result = await RevenueCatUI.presentPaywall();
       switch (result) {
         case PAYWALL_RESULT.PURCHASED:
@@ -181,7 +229,7 @@ export default function PaywallScreen() {
       }]}>
 
         <Animated.View style={[styles.header, { opacity: contentA, transform: [{ translateY: contentY }] }]}>
-          <Text style={styles.trialBadge}>✦  7-DAY FREE TRIAL  ✦</Text>
+          <Text style={styles.trialBadge}>✦  3-DAY FREE TRIAL  ✦</Text>
           <Text style={styles.headline}>
             Unlock your focus.{'\n'}
             <Text style={styles.headlineAccent}>Protect your {goalText}.</Text>
@@ -217,13 +265,13 @@ export default function PaywallScreen() {
             >
               {presenting
                 ? <ActivityIndicator color="#1A0602" size="small" />
-                : <Text style={styles.ctaTxt}>See pricing — 7 days free</Text>
+                : <Text style={styles.ctaTxt}>See pricing — 3 days free</Text>
               }
             </LinearGradient>
           </TouchableOpacity>
 
           <Text style={styles.ctaFine}>
-            Free for 7 days. Cancel anytime before trial ends — you won't be charged.
+            Free for 3 days. Cancel anytime before trial ends — you won't be charged.
           </Text>
 
           <View style={styles.footer}>

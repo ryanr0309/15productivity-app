@@ -6,9 +6,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { saveSession } from '../services/sessionService';
 import { startBlocking, stopBlocking } from '../services/screenTimeService';
+import {
+  scheduleSessionEndNotification,
+  cancelSessionEndNotification,
+  sendSessionEndedNotification,
+} from '../../src/lib/sessionNotifications';
+import { LiveActivity } from '../lib/liveActivity';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-export const CHECKPOINT_INTERVAL_SEC = 25 * 60;
+export const CHECKPOINT_INTERVAL_SEC = 0.5 * 60;
 export const CHECKPOINT_BREAK_SEC    = 5 * 60;
 
 const STORAGE_KEY = 'ember_session_v1';
@@ -46,8 +52,13 @@ interface SessionState {
 // ─── Module-level interval ────────────────────────────────────────────────────
 let _interval: ReturnType<typeof setInterval> | null = null;
 
+// Guard flag — prevents _tick from firing the end logic more than once
+// if the interval fires a second time before stopInterval() takes effect.
+let _sessionEndFired = false;
+
 function startInterval() {
   if (_interval) clearInterval(_interval);
+  _sessionEndFired = false;
   _interval = setInterval(() => useSessionStore.getState()._tick(), 1000);
 }
 
@@ -79,16 +90,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   breakStartedAt:   null,
 
   startSession: async (goal, durationSec = 25 * 60) => {
-    stopInterval();
 
-    // Read onboardingStore at call-time using getState() — safe to call
-    // outside React components, unlike the useOnboardingStore hook.
+    stopInterval();
     const { useOnboardingStore } = await import('./onboardingStore');
     const { screenTimeSelectionId } = useOnboardingStore.getState();
-
-    // startBlocking() only takes durationSec — it uses the SELECTION_ID
-    // constant internally, which was set via saveSelectionToken() in the
-    // screen-time onboarding screen.
+    
     if (screenTimeSelectionId) {
       await startBlocking(durationSec, goal);
     }
@@ -107,20 +113,29 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       checkpointsTaken: 0, breakStartedAt: null,
     });
 
+    // Schedule a local notification to fire when the session naturally ends.
+    // This fires even if the app is killed — iOS delivers it locally.
+    await scheduleSessionEndNotification(durationSec, goal);
+
     startInterval();
+    await LiveActivity.start(goal, durationSec);
   },
 
   stopSession: async () => {
+    // User manually stopped — cancel the scheduled end notification so it
+    // doesn't fire at the original end time after the session is already over.
+    await cancelSessionEndNotification();
+
     await stopBlocking();
     stopInterval();
     const s = get();
     console.log('[Ember] stopSession saving:', {
-      goal:        s.goal,
-      startedAt:   s.startedAt,
+      goal:          s.goal,
+      startedAt:     s.startedAt,
       startedAtDate: s.startedAt ? new Date(s.startedAt).toISOString() : 'NULL',
-      elapsed:     s.elapsed,
-      durationSec: s.durationSec,
-      checkpoints: s.checkpointsTaken,
+      elapsed:       s.elapsed,
+      durationSec:   s.durationSec,
+      checkpoints:   s.checkpointsTaken,
     });
     await saveSession({
       goal:         s.goal,
@@ -132,9 +147,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     });
     set({ isRunning: false });
     await clearPersisted();
+    await LiveActivity.end(false);
   },
 
   resetSession: async () => {
+    await cancelSessionEndNotification();
     stopInterval();
     set({
       goal: '', durationSec: 25 * 60, startedAt: null,
@@ -162,11 +179,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   completeCheckpoint: async () => {
     const s = get();
-    // Next checkpoint is CHECKPOINT_INTERVAL_SEC from the moment this one is completed,
-    // not from when it was due. So if user takes it late, next is still 25min from now.
     const newNext  = s.elapsed + CHECKPOINT_INTERVAL_SEC;
     const newTaken = s.checkpointsTaken + 1;
-    set({ nextCheckpointAt: newNext, checkpointsTaken: newTaken, breakStartedAt: null , checkpointReady: false });
+    set({ nextCheckpointAt: newNext, checkpointsTaken: newTaken, breakStartedAt: null, checkpointReady: false });
     if (s.startedAt !== null) {
       await persist({
         goal:             s.goal,
@@ -180,14 +195,22 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   _tick: () => {
-    const { startedAt, durationSec, nextCheckpointAt, checkpointReady } = get();
+    const { startedAt, durationSec, nextCheckpointAt } = get();
     if (startedAt === null) return;
+
     const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+
     if (elapsed >= durationSec) {
+      
+      // Guard: only run end logic once even if _tick fires again before
+      // the interval is fully cleared (can happen in the same JS turn).
+      if (_sessionEndFired) return;
+      _sessionEndFired = true;
+
       stopInterval();
       set({ elapsed: durationSec, isRunning: false, checkpointReady: false });
       clearPersisted();
-      // Session ended naturally — unblock apps and save to Supabase
+
       const s = get();
       stopBlocking().catch(e => console.warn('[Ember] stopBlocking error:', e));
       saveSession({
@@ -198,9 +221,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         wasCompleted: true,
         checkpoints:  s.checkpointsTaken,
       }).catch(e => console.warn('[Ember] saveSession error:', e));
+
+      // Cancel the scheduled notification and replace it with an immediate one.
+      // cancelSessionEndNotification() MUST be called before send so that
+      // the scheduled one doesn't fire a second later alongside the immediate one.
+      
+      cancelSessionEndNotification()
+        .then(() => sendSessionEndedNotification(s.goal))
+        .catch(e => console.warn('[Ember] session end notification error:', e));
+
       return;
     }
-    set({ elapsed, checkpointReady: false || elapsed >= nextCheckpointAt });
+
+    set({ elapsed, checkpointReady: elapsed >= nextCheckpointAt });
   },
 }));
 
@@ -211,12 +244,13 @@ export async function rehydrateSession(): Promise<boolean> {
     if (!raw) return false;
     const saved: PersistedSession = JSON.parse(raw);
     const elapsed = Math.floor((Date.now() - saved.startedAt) / 1000);
-     if (elapsed >= saved.durationSec) {
+
+    if (elapsed >= saved.durationSec) {
       await clearPersisted();
-      // Session expired while app was closed — clean up blocking safely on main thread
       await stopBlocking();
       return false;
     }
+
     useSessionStore.setState({
       goal:             saved.goal,
       durationSec:      saved.durationSec,
@@ -264,4 +298,3 @@ export const selectBreakRemaining = (s: SessionState): number => {
   const elapsed = Math.floor((Date.now() - s.breakStartedAt) / 1000);
   return Math.max(CHECKPOINT_BREAK_SEC - elapsed, 0);
 };
-0

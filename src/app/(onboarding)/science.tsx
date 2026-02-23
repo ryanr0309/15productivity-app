@@ -369,7 +369,7 @@ export default function ScienceScreen() {
           paddingBottom: insets.bottom + 40,
         }]}
         showsVerticalScrollIndicator={false}
-        scrollEnabled={showCTA}
+        scrollEnabled={phase !== 'willpower'}
       >
         {/* Top bar */}
         <View style={styles.topBar}>
@@ -482,7 +482,7 @@ export default function ScienceScreen() {
             </Text>
             <View style={styles.statsRow}>
               <StatPill stat="40%" desc="more productive with structured breaks vs marathon sessions" delay={0} parentAnim={statsA} />
-              <StatPill stat="2min" desc="is all the active reset time you need between focus blocks" delay={120} parentAnim={statsA} />
+              <StatPill stat="5min" desc="is all the active reset time you need between focus blocks" delay={120} parentAnim={statsA} />
             </View>
             <View style={styles.statsRow}>
               <StatPill stat="52:17" desc="optimal work-to-break ratio identified by DeskTime study" delay={240} parentAnim={statsA} />

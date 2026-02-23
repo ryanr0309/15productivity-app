@@ -29,6 +29,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import StartSessionModal from '../../../components/StartSessionModal';
 import ScreenTimeButton from '../../../components/ScreenTime';
 import { useOnboardingStore } from '../../../store/onboardingStore';
+import { COLORS, FONTS } from '../../../theme';
 
 const { width, height } = Dimensions.get('window');
 const MASCOT_SIZE = Math.round(width * 0.44);
@@ -51,6 +52,7 @@ function AnimatedFlame({
   // Fast flicker — runs independently inside the component
   const flicker = useRef(new Animated.Value(0)).current;
 
+  
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -302,6 +304,43 @@ export default function HomeScreen() {
   const onPressIn  = () => Animated.spring(btnScale, { toValue: 0.96, useNativeDriver: true }).start();
   const onPressOut = () => Animated.spring(btnScale, { toValue: 1,    useNativeDriver: true }).start();
 
+  const mascotScale   = useRef(new Animated.Value(0.6)).current;
+    const mascotOpacity = useRef(new Animated.Value(0)).current;
+    const mascotY       = useRef(new Animated.Value(30)).current;
+   const floatY = useRef(new Animated.Value(0)).current;
+useEffect(() => {
+  // Mascot entrance
+  Animated.sequence([
+    Animated.delay(400),
+    Animated.parallel([
+      Animated.timing(mascotOpacity, {
+        toValue: 1, duration: 600,
+        easing: Easing.out(Easing.quad), useNativeDriver: true,
+      }),
+      Animated.spring(mascotScale, {
+        toValue: 1, tension: 50, friction: 7, useNativeDriver: true,
+      }),
+      Animated.timing(mascotY, {
+        toValue: 0, duration: 500,
+        easing: Easing.out(Easing.quad), useNativeDriver: true,
+      }),
+    ]),
+  ]).start();
+
+  // Float loop
+  Animated.loop(
+    Animated.sequence([
+      Animated.timing(floatY, {
+        toValue: -12, duration: 2000,
+        easing: Easing.inOut(Easing.sin), useNativeDriver: true,
+      }),
+      Animated.timing(floatY, {
+        toValue: 0, duration: 2000,
+        easing: Easing.inOut(Easing.sin), useNativeDriver: true,
+      }),
+    ])
+  ).start();
+}, []);
   if (!fontsLoaded) return null;
 
   return (
@@ -325,7 +364,38 @@ export default function HomeScreen() {
 
         {/* ── Animated flame — sits above ember. wordmark ── */}
      
+           <Animated.View
+                  style={[
+                    styles.mascotArea,
+                    {
+                      opacity:   mascotOpacity,
+                      transform: [
+                        { scale: mascotScale },
+                        { translateY: Animated.add(mascotY, floatY) },
+                      ],
+                    },
+                  ]}
+                >
+                 
+                  <Image
+          source={require('../../../assets/images/embert.png')}
+          style={{ width: 220, height: 260, resizeMode: 'contain', borderRadius: 1000 }}
+        />
         
+                  {/* Mascot ground shadow */}
+                  <Animated.View
+                    style={[
+                      styles.mascotShadow,
+                      {
+                        opacity:   mascotOpacity,
+                        transform: [
+                          { scaleX: floatY.interpolate({ inputRange: [-12, 0], outputRange: [0.78, 1] }) },
+                          { scaleY: floatY.interpolate({ inputRange: [-12, 0], outputRange: [0.70, 1] }) },
+                        ],
+                      },
+                    ]}
+                  />
+                </Animated.View>
         {/* ember. */}
         <Text style={styles.appName}>ember.</Text>
         <Text style={styles.tagline}>Focus burns brighter</Text>
@@ -478,4 +548,91 @@ blockerIcon:    { fontSize: 20 },
 blockerLabel:   { fontFamily: 'Nunito_700Bold', fontSize: 14, color: '#FFF4E6' },
 blockerSub:     { fontFamily: 'Nunito_400Regular', fontSize: 12, color: 'rgba(255,244,230,0.40)', marginTop: 2 },
 blockerChevron: { fontFamily: 'Nunito_700Bold', fontSize: 22, color: 'rgba(255,244,230,0.25)' },
+mascotArea: {
+    alignItems:      'center',
+    justifyContent:  'center',
+    marginVertical:  8,
+  },
+
+  mascotPlaceholder: {
+    width:           220,
+    height:          240,
+    alignItems:      'center',
+    justifyContent:  'center',
+    position:        'relative',
+  },
+  mascotRingOuter: {
+    position:        'absolute',
+    width:           220,
+    height:          220,
+    borderRadius:    110,
+    borderWidth:     1.5,
+    borderColor:     'rgba(255,120,30,0.12)',
+    borderStyle:     'dashed',
+  },
+  mascotRingInner: {
+    position:        'absolute',
+    width:           160,
+    height:          160,
+    borderRadius:    80,
+    borderWidth:     1,
+    borderColor:     'rgba(255,120,30,0.08)',
+  },
+  mascotIconWrap: {
+    alignItems:   'center',
+    gap: 6,
+  },
+  mascotFlameIcon: {
+    fontSize: 72,
+  },
+  mascotPlaceholderLabel: {
+    fontFamily:    FONTS.bold,
+    fontSize:      13,
+    color:         'rgba(255,180,80,0.50)',
+    letterSpacing: 1,
+  },
+  mascotPlaceholderSub: {
+    fontFamily: FONTS.regular,
+    fontSize:   10,
+    color:      'rgba(255,180,80,0.28)',
+    letterSpacing: 0.5,
+  },
+
+  mascotShadow: {
+    width:           100,
+    height:          14,
+    borderRadius:    50,
+    backgroundColor: '#FF4400',
+    opacity:         0.22,
+    marginTop:       -8,
+    // Blur shadow
+    shadowColor:    '#FF4400',
+    shadowOffset:   { width: 0, height: 0 },
+    shadowOpacity:  1,
+    shadowRadius:   12,
+  },
+
+  // Text
+  textBlock: {
+    alignItems:   'center',
+    gap: 14,
+    paddingHorizontal: 8,
+  },
+  title: {
+    fontFamily:    FONTS.black,
+    fontSize:      36,
+    color:         COLORS.cream,
+    textAlign:     'center',
+    lineHeight:    44,
+    letterSpacing: -0.8,
+  },
+  subtitle: {
+    fontFamily:  FONTS.regular,
+    fontSize:    16,
+    color:       'rgba(255,244,230,0.48)',
+    textAlign:   'center',
+    lineHeight:  24,
+    maxWidth:    300,
+  },
+
 });

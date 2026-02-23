@@ -26,7 +26,7 @@ const { width, height } = Dimensions.get('window');
 
 const FEATURES = [
   { icon: '🚫', title: 'Block distracting apps',   sub: 'Instagram, TikTok, Reddit — gone during focus.' },
-  { icon: '🔓', title: 'Auto-unlocks at break',     sub: 'Apps unblock when your checkpoint starts.' },
+  { icon: '🔓', title: 'Auto-unlocks on session end',     sub: 'Apps unblock when you exit the focus block' },
   { icon: '📊', title: 'Track real usage',           sub: 'See which apps actually eat your time.' },
 ];
 
@@ -89,7 +89,7 @@ export default function ScreenTimePermissionScreen() {
   const handleConfirm = useCallback(() => {
     setHasSeenScreenTimePrompt();
     setStep('done');
-    setTimeout(() => router.replace('/(tabs)'), 900);
+    setTimeout(() => router.push('/(onboarding)/notifications'), 900);
   }, []);
 
   const handleSkip = useCallback(() => {
@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   pickerViewWrap: {
-    height: 180,
+    height: height * 0.35,
     borderRadius: 14,
     overflow: 'hidden',
     position: 'relative',

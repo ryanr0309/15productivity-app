@@ -11,6 +11,7 @@ import React, { useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   Animated, Dimensions, StatusBar, Easing,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -252,18 +253,10 @@ export default function WelcomeScreen() {
             │                                             │
             └─────────────────────────────────────────────┘
           */}
-          <View style={styles.mascotPlaceholder}>
-            {/* Outer ring */}
-            <View style={styles.mascotRingOuter} />
-            {/* Inner ring */}
-            <View style={styles.mascotRingInner} />
-            {/* Flame icon placeholder */}
-            <View style={styles.mascotIconWrap}>
-              <Text style={styles.mascotFlameIcon}>🔥</Text>
-              <Text style={styles.mascotPlaceholderLabel}>EmberMascot</Text>
-              <Text style={styles.mascotPlaceholderSub}>replace with SVG component</Text>
-            </View>
-          </View>
+          <Image
+  source={require('../../assets/images/embert.png')}
+  style={{ width: 220, height: 260, resizeMode: 'contain', borderRadius: 1000 }}
+/>
 
           {/* Mascot ground shadow */}
           <Animated.View
@@ -309,7 +302,7 @@ export default function WelcomeScreen() {
             </LinearGradient>
           </TouchableOpacity>
 
-          <Text style={styles.ctaFine}>Free 7-day trial · Cancel anytime</Text>
+          <Text style={styles.ctaFine}>Free 3-day trial · Cancel anytime</Text>
         </Animated.View>
 
       </View>

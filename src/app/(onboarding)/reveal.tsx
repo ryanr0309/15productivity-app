@@ -54,7 +54,7 @@ const STEP_META = [
   { eyebrow: '01 — APP BLOCKING', title: 'Lock out every distraction.',     body: "During a session, every distracting app goes dark. Instagram, TikTok, YouTube — all blocked. Tap one to see what happens." },
   { eyebrow: '02 — SESSION START',title: 'You pick the goal and duration.', body: "Choose what you're working on and how long. Ember builds your block around it — checkpoints timed to your rhythm." },
   { eyebrow: '03 — FOCUS TIMER',  title: 'One screen. One goal. Eyes down.',body: "A live timer. A progress bar telling you exactly when your next break fires. Nothing else." },
-  { eyebrow: '04 — CHECKPOINTS',  title: 'Choose your 2-minute reset.',     body: "When a checkpoint fires, you pick a game. Not Netflix. Not scrolling. A mini-game that actually restores your focus." },
+  { eyebrow: '04 — CHECKPOINTS',  title: 'Choose your 5-minute reset.',     body: "When a checkpoint fires, you pick a game. Not Netflix. Not scrolling. A mini-game that actually restores your focus." },
   { eyebrow: '05 — EXIT GUARD',   title: 'You have to mean it to leave.',   body: "Want to quit? Type your goal to confirm you're done. The friction is intentional — it makes you think twice." },
   { eyebrow: '06 — INSIGHTS',     title: 'Watch your focus compound.',      body: "Every session builds your picture. Best focus windows, streak momentum, weekly hours — you can see yourself improving." },
 ];
@@ -427,7 +427,7 @@ function CheckpointDemo() {
             <Text style={cp.cpIcon}>⏰</Text>
             <View>
               <Text style={cp.cpTitle}>Checkpoint!</Text>
-              <Text style={cp.cpSub}>Pick a 2-minute reset game</Text>
+              <Text style={cp.cpSub}>Pick a 5-minute reset game</Text>
             </View>
           </View>
           <View style={cp.grid}>

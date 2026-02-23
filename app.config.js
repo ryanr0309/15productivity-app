@@ -1,48 +1,42 @@
 // app.config.js
-// Replace YOUR_TEAM_ID with your 10-char Apple Team ID (find it at
-// developer.apple.com → Membership → Team ID, e.g. "AB12CD34EF")
-// Replace com.yourcompany.ember with your actual bundle ID everywhere.
-
-const BUNDLE_ID  = 'com.ryan.fifteen';
-const TEAM_ID    = 'YW69L3H994';
-const APP_GROUP  = `group.${BUNDLE_ID}`;
+const BUNDLE_ID = 'com.ryan.fifteen';
+const TEAM_ID   = 'YW69L3H994';
+const APP_GROUP = `group.${BUNDLE_ID}`;
 
 export default {
   expo: {
-    name: 'Fifteen',
+    name: 'Ember',
     slug: 'fifteen',
+    scheme: 'fifteen',
     version: '1.0.0',
     platforms: ['ios'],
     ios: {
       bundleIdentifier: BUNDLE_ID,
       buildNumber: '15',
-      deploymentTarget: '16.0',  // FamilyControls needs 16+ for full feature set
+      deploymentTarget: '16.2',   // bumped from 16.0 — Live Activities need 16.2
       appleTeamId: TEAM_ID,
+      icon: './assets/images/ember.jpeg',
       infoPlist: {
         NSFamilyControlsUsageDescription:
           'Ember uses Screen Time to block distracting apps during your focus sessions.',
         CFBundleURLTypes: [{ CFBundleURLSchemes: ['fifteen'] }],
         CFBundleURLName: BUNDLE_ID,
-         ITSAppUsesNonExemptEncryption: false
+        ITSAppUsesNonExemptEncryption: false,
+        // Added by withLiveActivity plugin — listed here for visibility only
+        // NSSupportsLiveActivities: true,
       },
       entitlements: {
-        // ── The entitlement Apple approved ──
         'com.apple.developer.family-controls': true,
-        // ── App Groups: required for main app ↔ extensions to share data ──
         'com.apple.security.application-groups': [APP_GROUP],
+        // Added by withLiveActivity plugin — listed here for visibility only
+        // 'com.apple.developer.live-activity': true,
       },
-      
     },
 
     plugins: [
-      // ── 1. Raise iOS deployment target for all pods ──
-       ["expo-build-properties", {}],
-      // ── 2. react-native-device-activity ──
-      // This plugin does the heavy lifting:
-      //   • Injects FamilyControls entitlement into the main target
-      //   • Creates the DeviceActivityMonitor extension target
-      //   • Creates the ShieldConfiguration extension target
-      //   • Wires App Groups across all three targets
+      ['expo-build-properties', {}],
+
+      // ── Screen Time (unchanged) ──────────────────────────────────────────
       [
         'react-native-device-activity',
         {
@@ -50,15 +44,23 @@ export default {
           appGroup:    APP_GROUP,
         },
       ],
+
+      // ── Live Activities ──────────────────────────────────────────────────
+      // Plugin lives at plugins/withLiveActivity.js
+      // Swift source files live at plugins/live-activity-swift/*.swift
+      [
+        './plugins/withLiveActivity',
+        {
+          appleTeamId: TEAM_ID,
+          appGroup:    APP_GROUP,
+        },
+      ],
     ],
 
-    // ── EAS: tell it about the two extension targets so it generates
-    //    credentials for them before the build starts ──
     extra: {
-      
-  eas: {
-    projectId: '4f8eb1c1-4947-4a21-9cbf-7118c8cd3c00'
-  }
-
+      eas: {
+        projectId: '4f8eb1c1-4947-4a21-9cbf-7118c8cd3c00',
+      },
+    },
   },
-}};
+};

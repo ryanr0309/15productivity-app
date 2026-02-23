@@ -583,84 +583,103 @@ export default function InsightsScreen() {
         )}
 
         {/* ══ 5. WEEKLY CHART ══ */}
-        {sec(5,
-          <Card style={{ paddingBottom: 24 }}>
-            <View style={styles.tabRow}>
-              {(['Focus', 'Total', 'Sessions'] as ChartTab[]).map(t => (
-                <TouchableOpacity
-                  key={t} style={styles.tabBtn} activeOpacity={0.7}
-                  onPress={() => { setChartTab(t); setChartKey(k => k + 1); }}
-                >
-                  <Text style={[styles.tabTxt, chartTab === t && styles.tabTxtActive]}>{t}</Text>
-                  {chartTab === t && <View style={styles.tabUnderline} />}
-                </TouchableOpacity>
+        
+{sec(5,
+  <Card style={{ paddingBottom: 24 }}>
+
+    {/* Header — no tabs, just the label */}
+    <View style={styles.chartSubHead}>
+      <Text style={styles.chartSubLbl}>FOCUS TIME THIS WEEK</Text>
+    </View>
+
+    {loading ? (
+      <Skeleton w="100%" h={wkBarMaxH + 40} r={6} />
+    ) : (() => {
+      // Re-derive bar values directly from session data so they're always live.
+      // For each day in weekBars, sum duration_minutes of sessions that started
+      // on that ISO date. Falls back to weekBars[i].minutes if no session data.
+      const barValues: number[] = weekBars.map(b => {
+        if (data?.recentSessions) {
+          const dayTotal = data.recentSessions
+            .filter(s => s.started_at.slice(0, 10) === b.isoDate)
+            .reduce((sum, s) => sum + ((s.elapsed_sec/60)), 0);
+          // If sessions exist for the week but this day has 0, that's valid —
+          // only fall back to b.minutes if recentSessions is missing entirely.
+          return dayTotal;
+        }
+        return b.minutes ?? 0;
+      });
+
+      const maxVal = Math.max(...barValues, 1); // never divide by zero
+
+      // Y-axis labels derived from actual max, not a hardcoded 120
+      const yStep = maxVal <= 30 ? 10
+                  : maxVal <= 60 ? 15
+                  : maxVal <= 120 ? 30
+                  : maxVal <= 240 ? 60
+                  : 120;
+      const yMax  = Math.ceil(maxVal / yStep) * yStep;
+      const yLabels = [yMax, yMax * 0.75, yMax * 0.5, yMax * 0.25, 0]
+        .map(v => v >= 60
+          ? `${Math.round(v / 60)}h`
+          : `${Math.round(v)}m`
+        );
+
+        console.log('barValues', barValues, 'maxVal', maxVal, 'yMax', yMax);
+      return (
+        <View style={styles.weekChartWrap}>
+          {/* Y-axis */}
+          <View style={styles.yAxis}>
+            {yLabels.map((l, i) => (
+              <Text key={i} style={styles.yLabel}>{l}</Text>
+            ))}
+          </View>
+
+          <View style={{ flex: 1 }}>
+            {/* Grid lines */}
+            <Svg width="100%" height={wkBarMaxH} style={{ position: 'absolute', top: 0 }}>
+              {[0, 0.25, 0.5, 0.75, 1].map(t => (
+                <Line key={t}
+                  x1="0" y1={wkBarMaxH * (1 - t)} x2="100%" y2={wkBarMaxH * (1 - t)}
+                  stroke="rgba(255,255,255,0.06)" strokeWidth={1}
+                />
+              ))}
+            </Svg>
+
+            {/* Bars */}
+            <View style={[styles.weekBarsRow, { height: wkBarMaxH }]}>
+              {weekBars.map((b, i) => (
+                <AnimBar
+                  key={`focusonly-${i}-${barValues[i]}`}
+                  heightPct={barValues[i] / yMax}
+                  maxH={wkBarMaxH}
+                  width={wkBarW}
+                  isToday={b.isToday}
+                  delay={i * 55}
+                />
               ))}
             </View>
 
-            <View style={styles.chartSubHead}>
-              <Text style={styles.chartSubLbl}>
-                CHART ({chartTab === 'Sessions' ? 'SESSIONS' : 'FOCUS TIME'})
-              </Text>
-              <View style={styles.tagsBtn}>
-                <Text style={styles.tagsTxt}>🏷 Tags</Text>
-              </View>
+            {/* Day labels */}
+            <View style={[styles.weekBarsRow, { marginTop: 8 }]}>
+              {weekBars.map((b, i) => (
+                <View key={i} style={{ width: wkBarW, alignItems: 'center' }}>
+                  <Text style={[styles.weekDayLbl, b.isToday && styles.weekDayLblActive]}>
+                    {b.day.slice(0, 3)}
+                  </Text>
+                  <Text style={[styles.weekDateLbl, b.isToday && styles.weekDayLblActive]}>
+                    {b.date}
+                  </Text>
+                </View>
+              ))}
             </View>
+          </View>
+        </View>
+      );
+    })()}
+  </Card>
+)}
 
-            {loading ? (
-              <Skeleton w="100%" h={wkBarMaxH + 40} r={6} />
-            ) : (
-              <View style={styles.weekChartWrap}>
-                <View style={styles.yAxis}>
-                  {wkYLabels.map(l => (
-                    <Text key={l} style={styles.yLabel}>{l}</Text>
-                  ))}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Svg width="100%" height={wkBarMaxH} style={{ position: 'absolute', top: 0 }}>
-                    {[0, 0.25, 0.5, 0.75, 1].map(t => (
-                      <Line key={t}
-                        x1="0" y1={wkBarMaxH * (1 - t)} x2="100%" y2={wkBarMaxH * (1 - t)}
-                        stroke="rgba(255,255,255,0.06)" strokeWidth={1}
-                      />
-                    ))}
-                  </Svg>
-                  <View style={[styles.weekBarsRow, { height: wkBarMaxH }]}>
-                    {weekBars.map((b, i) => {
-                      const val = chartTab === 'Sessions'
-                        ? (data?.recentSessions.filter(s => s.started_at.slice(0, 10) === b.isoDate).length ?? 0)
-                        : b.minutes;
-                      const maxVal = chartTab === 'Sessions'
-                        ? Math.max(...weekBars.map(wb => data?.recentSessions.filter(s => s.started_at.slice(0, 10) === wb.isoDate).length ?? 0), 1)
-                        : wkMaxMins;
-                      return (
-                        <AnimBar
-                          key={`${chartKey}-${i}`}
-                          heightPct={val / maxVal}
-                          maxH={wkBarMaxH}
-                          width={wkBarW}
-                          isToday={b.isToday}
-                          delay={i * 55}
-                        />
-                      );
-                    })}
-                  </View>
-                  <View style={[styles.weekBarsRow, { marginTop: 8 }]}>
-                    {weekBars.map((b, i) => (
-                      <View key={i} style={{ width: wkBarW, alignItems: 'center' }}>
-                        <Text style={[styles.weekDayLbl, b.isToday && styles.weekDayLblActive]}>
-                          {b.day.slice(0, 3)}
-                        </Text>
-                        <Text style={[styles.weekDateLbl, b.isToday && styles.weekDayLblActive]}>
-                          {b.date}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              </View>
-            )}
-          </Card>
-        )}
 
         {/* ══ 6. RECENT SESSIONS ══ */}
         {sec(6,

@@ -1,16 +1,3 @@
-/**
- * app/onboarding/age.tsx
- *
- * FIX: Removed onScroll handler — it was calling setSelectedAge on every
- * scroll tick, triggering re-renders that interrupted ScrollView's gesture
- * tracking and locked it after one swipe.
- *
- * FIX: contentInset replaces dummy padding <View>s so snapToInterval
- * only counts real items, not spacers.
- *
- * State updates ONLY on scroll end, never during active scroll.
- */
-
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
@@ -35,7 +22,7 @@ const VISIBLE     = 5;
 const WHEEL_H     = ITEM_H * VISIBLE;
 const DEFAULT_AGE = 22;
 const DEFAULT_IDX = AGES.indexOf(DEFAULT_AGE);
-const INSET       = ITEM_H * 2; // contentInset so item[0] sits at centre row
+const INSET       = ITEM_H * 2;
 
 function ageCopy(age: number): { line: string; emoji: string } {
   if (age < 18) return { emoji: '📚', line: 'Building focus now sets you up for life.' };
@@ -54,7 +41,9 @@ export default function AgeScreen() {
 
   const [selectedAge, setSelectedAge] = useState(DEFAULT_AGE);
   const scrollRef    = useRef<ScrollView>(null);
-  const committedIdx = useRef(DEFAULT_IDX); // never causes re-renders
+  const committedIdx = useRef(DEFAULT_IDX);
+  // Track whether momentum is still in flight — only commit after it fully settles
+  const isMomentumScrolling = useRef(false);
 
   const headerA = useRef(new Animated.Value(0)).current;
   const headerY = useRef(new Animated.Value(16)).current;
@@ -91,28 +80,38 @@ export default function AgeScreen() {
 
     setTimeout(() => {
       scrollRef.current?.scrollTo({ y: DEFAULT_IDX * ITEM_H, animated: false });
-    }, 60);
+    }, 80);
   }, []);
 
-  // Only called on scroll END — safe to setState here
-  const commitScroll = (offsetY: number) => {
-    const idx     = Math.round(offsetY / ITEM_H);
-    const clamped = Math.max(0, Math.min(AGES.length - 1, idx));
-
-    scrollRef.current?.scrollTo({ y: clamped * ITEM_H, animated: true });
-
-    if (clamped !== committedIdx.current) {
-      committedIdx.current = clamped;
-      setSelectedAge(AGES[clamped]);
+  const commitIdx = (offsetY: number) => {
+    const idx     = Math.max(0, Math.min(AGES.length - 1, Math.round(offsetY / ITEM_H)));
+    if (idx !== committedIdx.current) {
+      committedIdx.current = idx;
+      setSelectedAge(AGES[idx]);
       copyA.setValue(0.2);
       Animated.timing(copyA, { toValue: 1, duration: 200, useNativeDriver: true }).start();
     }
   };
 
-  const handleMomentumEnd  = (e: NativeSyntheticEvent<NativeScrollEvent>) =>
-    commitScroll(e.nativeEvent.contentOffset.y);
-  const handleScrollEndDrag = (e: NativeSyntheticEvent<NativeScrollEvent>) =>
-    commitScroll(e.nativeEvent.contentOffset.y);
+  // Only update state — never call scrollTo here.
+  // Calling scrollTo inside a scroll callback interrupts the native gesture
+  // and is what caused the lock. snapToInterval handles alignment natively.
+  const handleMomentumBegin = () => {
+    isMomentumScrolling.current = true;
+  };
+
+  const handleMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    isMomentumScrolling.current = false;
+    commitIdx(e.nativeEvent.contentOffset.y);
+  };
+
+  const handleScrollEndDrag = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    // Only commit when the user drags and releases with no momentum —
+    // if momentum is about to start, handleMomentumEnd will take over.
+    if (!isMomentumScrolling.current) {
+      commitIdx(e.nativeEvent.contentOffset.y);
+    }
+  };
 
   const handleContinue = () => {
     setAnswer('age', selectedAge);
@@ -148,7 +147,6 @@ export default function AgeScreen() {
       </Animated.View>
 
       <Animated.View style={[styles.wheelOuter, { opacity: wheelA, transform: [{ scale: wheelS }] }]}>
-        {/* Selection band — always at vertical centre (row 2 of 5) */}
         <View style={styles.selectionBand} pointerEvents="none">
           <LinearGradient
             colors={['rgba(255,144,48,0.11)', 'rgba(255,94,14,0.06)']}
@@ -166,21 +164,17 @@ export default function AgeScreen() {
           <LinearGradient colors={['transparent', '#0E0604']} style={StyleSheet.absoluteFill} />
         </View>
 
-        {/*
-          TWO FIXES HERE vs the broken version:
-          1. NO onScroll prop  — removing this stops mid-scroll re-renders
-          2. contentInset instead of padding Views — snapToInterval now only
-             snaps to real items, not the spacer views
-        */}
         <ScrollView
           ref={scrollRef}
           style={styles.wheelScroll}
-          contentContainerStyle={styles.wheelContent}
+          contentContainerStyle={[styles.wheelContent, { paddingVertical: INSET }]}
           showsVerticalScrollIndicator={false}
           snapToInterval={ITEM_H}
           decelerationRate="fast"
-          contentInset={{ top: INSET, bottom: INSET }}
-          contentOffset={{ x: 0, y: -INSET }}
+          // ✂️ snapToAlignment REMOVED — conflicts with paddingVertical on iOS
+          //    and causes the scroll to lock after the first snap.
+          //    snapToInterval alone is sufficient; padding handles centering.
+          onMomentumScrollBegin={handleMomentumBegin}
           onMomentumScrollEnd={handleMomentumEnd}
           onScrollEndDrag={handleScrollEndDrag}
         >

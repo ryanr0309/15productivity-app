@@ -25,6 +25,7 @@ export default function OnboardingLayout() {
          <Stack.Screen name="commitment" />    // Screen 13 — Commitment
          <Stack.Screen name="paywall"    />    // Screen 14 — Paywall
             <Stack.Screen name="screentime"/>    // Screen 16 — Screen time permission
+            <Stack.Screen name="notifications"  />    // Screen 17 — Notifications permission
       {/*
       
       <Stack.Screen name="reframe"    />    // Screen 8  — You're not broken

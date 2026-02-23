@@ -86,7 +86,7 @@ function buildPlan(
 ): PersonalisedPlan {
   const blockMins       = focusWindowToMins(focusWindow);
   const breakMins       = 2;
-  const checkpointEvery = Math.max(Math.floor(blockMins / 2), 10);
+  const checkpointEvery = 25;
   const sessionsPerDay  = dailyPhoneHours >= 6 ? 4 : dailyPhoneHours >= 3 ? 3 : 2;
 
   // How much phone time Ember will reclaim (assume 40% reduction from structured sessions)
@@ -254,7 +254,7 @@ function ScheduleVis({ plan, visible }: { plan: PersonalisedPlan; visible: boole
         </View>
         <View style={sv.labelItem}>
           <View style={[sv.labelDot, { backgroundColor: '#55DDAA' }]} />
-          <Text style={sv.labelTxt}>Reset {plan.breakMins}m</Text>
+          <Text style={sv.labelTxt}>Reset 5m</Text>
         </View>
       </View>
 
@@ -635,7 +635,7 @@ export default function PlanScreen() {
             {/* Personalised session note */}
             <View style={styles.noteWrap}>
               <Text style={styles.noteTxt}>
-                💡 We're starting you on{' '}
+                💡 We recommend starting on{' '}
                 <Text style={styles.noteAccent}>{plan.windowLabel}</Text>
                 {' '}— matched to your natural rhythm. You can always adjust.
               </Text>
@@ -756,7 +756,7 @@ export default function PlanScreen() {
               </LinearGradient>
             </TouchableOpacity>
             <View style={styles.ctaTrustRow}>
-              <Text style={styles.ctaTrustItem}>✓ 7 days free</Text>
+              <Text style={styles.ctaTrustItem}>✓ 3 days free</Text>
               <View style={styles.ctaTrustDot} />
               <Text style={styles.ctaTrustItem}>✓ Cancel anytime</Text>
               <View style={styles.ctaTrustDot} />
