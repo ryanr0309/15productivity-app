@@ -22,14 +22,13 @@ export default {
         CFBundleURLTypes: [{ CFBundleURLSchemes: ['fifteen'] }],
         CFBundleURLName: BUNDLE_ID,
         ITSAppUsesNonExemptEncryption: false,
-        // Added by withLiveActivity plugin — listed here for visibility only
-        // NSSupportsLiveActivities: true,
+
+      NSSupportsLiveActivities: true,
       },
       entitlements: {
         'com.apple.developer.family-controls': true,
         'com.apple.security.application-groups': [APP_GROUP],
-        // Added by withLiveActivity plugin — listed here for visibility only
-        // 'com.apple.developer.live-activity': true,
+        'com.apple.developer.live-activity': true,
       },
       supportsTablet: true
     },
@@ -49,18 +48,13 @@ export default {
       // ── Live Activities ──────────────────────────────────────────────────
       // Plugin lives at plugins/withLiveActivity.js
       // Swift source files live at plugins/live-activity-swift/*.swift
-     [
-  "@bacons/apple-targets",
-  {
-    targets: {
-      EmberLiveActivity: {
-        type: "widget",
-        bundleIdentifier: "com.ryan.fifteen.EmberLiveActivity",
-        deploymentTarget: "16.2",
-      },
-    },
-  },
-],
+      [
+        './plugins/withLiveActivity',
+        {
+          appleTeamId: TEAM_ID,
+          appGroup:    APP_GROUP,
+        },
+      ],
     ],
 
     extra: {
