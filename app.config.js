@@ -3,7 +3,9 @@ const BUNDLE_ID = 'com.ryan.fifteen';
 const TEAM_ID   = 'YW69L3H994';
 const APP_GROUP = `group.${BUNDLE_ID}`;
 
-export default {
+/* eslint-disable no-undef */
+
+module.exports = {
   expo: {
     name: 'Ember',
     slug: 'fifteen',
@@ -13,7 +15,7 @@ export default {
     ios: {
       bundleIdentifier: BUNDLE_ID,
       buildNumber: '15',
-      deploymentTarget: '16.2',   // bumped from 16.0 — Live Activities need 16.2
+      deploymentTarget: '16.2',
       appleTeamId: TEAM_ID,
       icon: './assets/images/ember.png',
       infoPlist: {
@@ -22,21 +24,21 @@ export default {
         CFBundleURLTypes: [{ CFBundleURLSchemes: ['fifteen'] }],
         CFBundleURLName: BUNDLE_ID,
         ITSAppUsesNonExemptEncryption: false,
-
-      NSSupportsLiveActivities: true,
+        NSSupportsLiveActivities: true,
+        NSSupportsLiveActivitiesFrequentUpdates: true,
       },
       entitlements: {
         'com.apple.developer.family-controls': true,
         'com.apple.security.application-groups': [APP_GROUP],
         'com.apple.developer.live-activity': true,
       },
-      supportsTablet: true
+      supportsTablet: true,
     },
 
     plugins: [
       ['expo-build-properties', {}],
 
-      // ── Screen Time (unchanged) ──────────────────────────────────────────
+      // Screen Time
       [
         'react-native-device-activity',
         {
@@ -45,16 +47,11 @@ export default {
         },
       ],
 
-      // ── Live Activities ──────────────────────────────────────────────────
-      // Plugin lives at plugins/withLiveActivity.js
-      // Swift source files live at plugins/live-activity-swift/*.swift
-      [
-        './plugins/withLiveActivity',
-        {
-          appleTeamId: TEAM_ID,
-          appGroup:    APP_GROUP,
-        },
-      ],
+      // Live Activities — reads from targets/EmberLiveActivity/expo-target.config.js
+      // '@bacons/apple-targets',
+
+      // Entitlement + Info.plist keys for the main app target
+      // './plugins/withLiveActivityMainApp',
     ],
 
     extra: {
