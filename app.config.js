@@ -15,7 +15,7 @@ export default {
       buildNumber: '15',
       deploymentTarget: '16.2',   // bumped from 16.0 — Live Activities need 16.2
       appleTeamId: TEAM_ID,
-      icon: './assets/images/ember.jpeg',
+      icon: './assets/images/ember.png',
       infoPlist: {
         NSFamilyControlsUsageDescription:
           'Ember uses Screen Time to block distracting apps during your focus sessions.',
@@ -31,6 +31,7 @@ export default {
         // Added by withLiveActivity plugin — listed here for visibility only
         // 'com.apple.developer.live-activity': true,
       },
+      supportsTablet: true
     },
 
     plugins: [
@@ -48,13 +49,18 @@ export default {
       // ── Live Activities ──────────────────────────────────────────────────
       // Plugin lives at plugins/withLiveActivity.js
       // Swift source files live at plugins/live-activity-swift/*.swift
-      [
-        './plugins/withLiveActivity',
-        {
-          appleTeamId: TEAM_ID,
-          appGroup:    APP_GROUP,
-        },
-      ],
+     [
+  "@bacons/apple-targets",
+  {
+    targets: {
+      EmberLiveActivity: {
+        type: "widget",
+        bundleIdentifier: "com.ryan.fifteen.EmberLiveActivity",
+        deploymentTarget: "16.2",
+      },
+    },
+  },
+],
     ],
 
     extra: {
