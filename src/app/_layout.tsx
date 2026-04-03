@@ -12,6 +12,8 @@ import { hasCompletedOnboarding, hasSeenScreenTimePrompt, useOnboardingStore } f
 import Purchases from 'react-native-purchases';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setupNotificationTapHandler } from '../lib/sessionNotifications';
+import { hasRedeemedPromo } from '../store/promoStore';
+import { PostHogProvider } from 'posthog-react-native'
 
 const RC_API_KEY = 'appl_oAPrSJxAenzObkBRjVsJJlnudRM';
 
@@ -50,22 +52,44 @@ export default function RootLayout() {
       // }
 
       // ── 3. Check onboarding state and route accordingly.
-      const [onboarded, seenScreenTime] = await Promise.all([
-        hasCompletedOnboarding(),
-        hasSeenScreenTimePrompt(),
-      ]);
+      // ── 3. Check onboarding state and route accordingly.
+const [onboarded, seenScreenTime, redeemedPromo] = await Promise.all([
+  hasCompletedOnboarding(),
+  hasSeenScreenTimePrompt(),
+  hasRedeemedPromo(),
+]);
 
-      if (!onboarded) {
-        router.replace('/(onboarding)');
-        setReady(true);
-        return;
-      }
+console.log(onboarded, seenScreenTime, redeemedPromo);
+if (!onboarded) {
+  // Check if they have an active RC entitlement or a redeemed promo
+  // before sending them back to onboarding — handles reinstalls
+  let hasAccess = redeemedPromo;
+  if (!hasAccess) {
+    try {
+      const info = await Purchases.getCustomerInfo();
+      hasAccess = !!info.entitlements.active['Fifteen Pro'];
+    } catch {
+      hasAccess = false;
+    }
+  }
 
-      if (!seenScreenTime) {
-        router.replace('/(onboarding)/screentime');
-        setReady(true);
-        return;
-      }
+  if (!hasAccess) {
+    router.replace('/(onboarding)');
+    setReady(true);
+    return;
+  }
+
+  // Has access but onboarding flag missing (e.g. reinstall) — send to screentime
+  router.replace('/(onboarding)/screentime');
+  setReady(true);
+  return;
+}
+
+if (!seenScreenTime) {
+  router.replace('/(onboarding)/screentime');
+  setReady(true);
+  return;
+}
 
       // ── 4. Returning user — check for live session.
       const hadSession = await rehydrateSession();
@@ -86,9 +110,17 @@ export default function RootLayout() {
   }
 
   return (
+
+    <PostHogProvider
+            apiKey="phc_cWR4wnOVHQlzwfJjS0xUy9zlLsWVRfBTOKVMT1oGrSw"
+            options={{
+                host: "https://us.i.posthog.com",
+            }}
+        >
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(onboarding)" />
       <Stack.Screen name="(protected)" />
     </Stack>
+    </PostHogProvider>
   );
 }

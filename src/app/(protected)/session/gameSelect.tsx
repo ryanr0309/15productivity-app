@@ -102,7 +102,7 @@ const GAMES = [
     id:       'stack',
     emoji:    '📦',
     name:     'Stack Blocks',
-    desc:     'Drop blocks on the platform. 5 drops.',
+    desc:     'Drop blocks on the platform.',
     tag:      'REWARD',
     tagStyle: 'reward',
     route:    '/session/games/stack',
@@ -209,7 +209,7 @@ export default function GameSelectScreen() {
                 <Text style={styles.title}>Choose a game </Text>
                 <Text style={styles.titleEmoji}>🎮</Text>
               </View>
-              <Text style={styles.sub}>2 minutes to reset your brain</Text>
+              <Text style={styles.sub}>5 minutes to reset your brain</Text>
             </View>
 
             {/* X button */}

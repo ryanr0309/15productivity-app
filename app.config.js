@@ -10,7 +10,7 @@ module.exports = {
     name: 'Ember',
     slug: 'fifteen',
     scheme: 'fifteen',
-    version: '1.0.0',
+    version: '1.0.2',
     platforms: ['ios'],
     ios: {
       bundleIdentifier: BUNDLE_ID,
@@ -19,24 +19,29 @@ module.exports = {
       appleTeamId: TEAM_ID,
       icon: './assets/images/ember.png',
       infoPlist: {
+         "CFBundleIcons~ipad": null,
         NSFamilyControlsUsageDescription:
           'Ember uses Screen Time to block distracting apps during your focus sessions.',
         CFBundleURLTypes: [{ CFBundleURLSchemes: ['fifteen'] }],
         CFBundleURLName: BUNDLE_ID,
         ITSAppUsesNonExemptEncryption: false,
-        NSSupportsLiveActivities: true,
-        NSSupportsLiveActivitiesFrequentUpdates: true,
+
       },
       entitlements: {
         'com.apple.developer.family-controls': true,
         'com.apple.security.application-groups': [APP_GROUP],
-        'com.apple.developer.live-activity': true,
+        
       },
       supportsTablet: true,
     },
 
     plugins: [
       ['expo-build-properties', {}],
+
+      ['expo-notifications', {
+    icon: './assets/images/ember.png',
+    color: '#ffffff',
+  }],
 
       // Screen Time
       [
@@ -47,6 +52,7 @@ module.exports = {
         },
       ],
 
+      ["expo-localization"]
       // Live Activities — reads from targets/EmberLiveActivity/expo-target.config.js
       // '@bacons/apple-targets',
 

@@ -17,6 +17,7 @@ import { OnboardingProgress } from '../../components/OnboardingProgress';
 import { useOnboardingStore } from '../../store/onboardingStore';
 import { QuestionLayout } from '../../components/QuestionLayout';
 import { ChoiceButton } from '../../components/ChoiceButton';
+import { usePostHog } from 'posthog-react-native';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -127,6 +128,13 @@ export default function QPhoneScreen() {
 
   const numA = useRef(new Animated.Value(0)).current;
   const numY = useRef(new Animated.Value(20)).current;
+
+   const posthog = usePostHog()
+  
+    useEffect(() => {
+      posthog.capture('onboarding_step_viewed', { step: 'phone' })
+    }, [])
+    
   useEffect(() => {
     Animated.sequence([
       Animated.delay(500),

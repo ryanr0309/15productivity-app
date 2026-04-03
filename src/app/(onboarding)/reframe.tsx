@@ -21,6 +21,7 @@ import {
 } from '@expo-google-fonts/nunito';
 import { COLORS, FONTS } from '../../theme';
 import { OnboardingProgress } from '../../components/OnboardingProgress';
+import { usePostHog } from 'posthog-react-native';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -134,6 +135,12 @@ export default function ReframeScreen() {
     });
   };
 
+   const posthog = usePostHog()
+  
+    useEffect(() => {
+      posthog.capture('onboarding_step_viewed', { step: 'reframe' })
+    }, [])
+    
   useEffect(() => {
     // Header in
     Animated.sequence([

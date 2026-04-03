@@ -143,10 +143,12 @@ export default function PopTheDotsGame() {
   const [timeLeft,   setTimeLeft]   = useState(GAME_DURATION_SEC);
   const [flashes,    setFlashes]    = useState<{ id: number; value: number; x: number; y: number }[]>([]);
 
+  
   const dotsRef  = useRef<Dot[]>([]);
   const scoreRef = useRef(0);
   const comboRef = useRef(1);
   const hitsRef  = useRef(0);
+  
 
   // Arena measured dimensions
   const [arenaLayout, setArenaLayout] = useState({ width: 0, height: 0, x: 0, y: 0 });
@@ -204,18 +206,20 @@ export default function PopTheDotsGame() {
 
     // Auto-expire: fade out dot when ring reaches 0
     const expiryTimer = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(dot.opacity, { toValue: 0, duration: 300, useNativeDriver: true }),
-        Animated.timing(dot.scale,   { toValue: 0.6, duration: 300, useNativeDriver: true }),
-      ]).start(() => {
-        // Missed dot → reset combo
-        comboRef.current = 1;
-        hitsRef.current  = 0;
-        setCombo(1);
-        setHits(0);
-        removeDot(dot.id);
-      });
-    }, DOT_LIFETIME_MS);
+  Animated.parallel([
+    Animated.timing(dot.opacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+    Animated.timing(dot.scale,   { toValue: 0.6, duration: 300, useNativeDriver: true }),
+  ]).start(() => {
+    // Only reset combo if player hasn't tapped anything in the last 600ms
+    if (Date.now() - lastTapTime.current > 600) {
+      comboRef.current = 0;
+      hitsRef.current  = 0;
+      setCombo(0);
+      setHits(0);
+    }
+    removeDot(dot.id);
+  });
+}, DOT_LIFETIME_MS);
 
     // Attach timer id so we can cancel on tap
     (dot as any)._expiryTimer = expiryTimer;
@@ -230,25 +234,27 @@ export default function PopTheDotsGame() {
     setDots([...dotsRef.current]);
   }, []);
 
-  // ── Handle tap on a dot ────────────────────────────────────────────────────
-  const handleTap = useCallback((dot: Dot) => {
-    // Cancel expiry
-    clearTimeout((dot as any)._expiryTimer);
+  
+  const lastTapTime = useRef(0);
 
-    // Combo logic
-    const newHits  = hitsRef.current + 1;
-    const newCombo = Math.min(Math.floor(newHits / COMBO_STEP) + 1, 5);
-    hitsRef.current  = newHits;
-    comboRef.current = newCombo;
-    setHits(newHits);
+// In handleTap:
+const handleTap = useCallback((dot: Dot) => {
+  clearTimeout((dot as any)._expiryTimer);
 
-    if (newCombo > comboRef.current - 1) bumpCombo();
-    setCombo(newCombo);
+  lastTapTime.current = Date.now();
 
-    // Score
-    const points  = 10 * newCombo;
-    scoreRef.current += points;
-    setScore(scoreRef.current);
+  const newHits = hitsRef.current + 1;
+  hitsRef.current = newHits;
+  comboRef.current = newHits;
+
+  setHits(newHits);
+  setCombo(newHits);
+  bumpCombo();
+
+  const points = 10 * newHits;
+  scoreRef.current += points;
+  setScore(scoreRef.current);
+  // ... rest unchanged
 
     // Bump score display
     Animated.sequence([

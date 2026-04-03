@@ -22,12 +22,14 @@ import { COLORS, FONTS } from '../../../theme';
 import AppBlockerSheet from '../../../components/AppBlockerSheet';
 import { useSessionStore } from '../../../store/sessionStore';
 import { NotificationsSettingsModal } from '../../../components/NotificationsSettingsModal';
+import { FeedbackModal } from '../../../components/FeedbackModal';
 // TODO: import { deleteAllUserSessions } from '../../../services/sessionService';
 // Paste your sessionService.ts and I'll add the real call here.
 
-const PRIVACY_URL      = 'https://yourapp.com/privacy';
-const TERMS_URL        = 'https://yourapp.com/terms';
+const PRIVACY_URL      = 'https://docs.google.com/document/d/e/2PACX-1vQFd8Mhq8xa6He6CllLMVHwUdo_r4VBj9fGaatCWmYn3MorjB59ldq-CM3JuHeg64EclbrEo6wN5DO3/pub';
+const TERMS_URL        = 'https://docs.google.com/document/d/e/2PACX-1vQP33WfPLWBH7tGRMwVSymaK4-kfsB8vydLLskcXIVcI4fUSZen5_mDK67SUwzgW66kcrty6fsfP8q9/pub';
 const SUBSCRIPTION_URL = 'https://apps.apple.com/account/subscriptions';
+const SUPPORT_EMAIL    = 'ryanthony2007@gmail.com'
 
 const { width } = Dimensions.get('window');
 
@@ -146,7 +148,7 @@ export default function SettingsScreen() {
   const [blockerOpen,          setBlockerOpen]          = useState(false);
   const [restoringPurchases,   setRestoringPurchases]   = useState(false);
   const [notifsOpen, setNotifsOpen] = useState(false);
-
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   // ── Delete all data ──────────────────────────────────────────────────────
   const handleDeleteConfirm = useCallback(async () => {
     setDeleting(true);
@@ -263,6 +265,23 @@ export default function SettingsScreen() {
             />
           </SectionCard>
 
+          <SectionHeader label="Support" />
+          <SectionCard>
+            <SettingsRow
+              icon="💡"
+              label="Send Feedback"
+              sublabel="Request features or report bugs"
+              onPress={() => setFeedbackOpen(true)}
+            />
+            <RowDivider />
+            <SettingsRow
+              icon="✉️"
+              label="Contact Support"
+              sublabel="Get help from the Ember team"
+              onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=Ember%20Support`)}
+            />
+          </SectionCard>
+
           {/* ── Legal ── */}
           <SectionHeader label="Legal" />
           <SectionCard>
@@ -309,6 +328,7 @@ export default function SettingsScreen() {
       />
 
       <NotificationsSettingsModal visible={notifsOpen} onClose={() => setNotifsOpen(false)} />
+      <FeedbackModal visible={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </>
   );
 }

@@ -22,8 +22,9 @@ export default function OnboardingLayout() {
       <Stack.Screen name="science"    />    // Screen 9 — The science
       <Stack.Screen name="reveal"     />    // Screen 10 — Introducing Ember
          <Stack.Screen name="plan"       />    // Screen 12 — Your personalized plan
-         <Stack.Screen name="commitment" />    // Screen 13 — Commitment
-         <Stack.Screen name="paywall"    />    // Screen 14 — Paywall
+         <Stack.Screen name="code" />    // Screen 11 — Creator Code
+         <Stack.Screen name="commitment"  />    // Screen 13 — Commitment
+<Stack.Screen name="paywall"     />    // Screen 15 — Paywall
             <Stack.Screen name="screentime"/>    // Screen 16 — Screen time permission
             <Stack.Screen name="notifications"  />    // Screen 17 — Notifications permission
       {/*

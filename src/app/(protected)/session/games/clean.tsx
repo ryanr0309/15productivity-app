@@ -253,7 +253,7 @@ export default function CleanPhoneGame() {
               {/* Glow behind mascot */}
               <View style={styles.mascotGlow} />
               <Image
-                source={require('../../../../assets/images/mascot.png')}
+                source={require('../../../../../assets/images/embert.png')}
                 style={styles.mascotImg}
                 resizeMode="contain"
               />

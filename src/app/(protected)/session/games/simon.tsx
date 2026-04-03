@@ -46,6 +46,9 @@ import { BreakStatusBar } from '../../../../components/BreakStatusBar';
 import { useBreakTimer } from '../../../../hooks/useBreakTimer';
 
 const { width: SW } = Dimensions.get('window');
+const BOARD_H_PAD = 20; // matches content paddingHorizontal
+const GAP = 12;
+const PAD_SIZE = Math.floor((SW - BOARD_H_PAD * 2 - GAP) / 2);
 
 // ─── Pad definitions ──────────────────────────────────────────────────────────
 interface Pad {
@@ -251,7 +254,7 @@ export default function SimonSaysGame() {
     phase === 'complete' ? '#66DD99'     :
     'rgba(255,244,230,0.38)';
 
-  const PAD_SIZE = Math.round((SW - 40 - 12) / 2); // 2 cols, 12px gap
+
 
   return (
     <View style={styles.root}>
@@ -303,9 +306,12 @@ export default function SimonSaysGame() {
 
         {/* ── Board ── */}
         <Animated.View style={[
-          styles.board,
-          { transform: [{ translateX: boardShake }] },
-        ]}>
+  styles.board,
+  {
+    width: PAD_SIZE * 2 + GAP,
+    transform: [{ translateX: boardShake }],
+  },
+]}>
           {PADS.map((pad, i) => {
             const isLit   = litPad === pad.id;
             const isError = errorPadId === pad.id;

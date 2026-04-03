@@ -21,6 +21,7 @@ import {
   getAuthorizationStatus,
 } from '../../services/screenTimeService';
 import { useOnboardingStore } from '../../store/onboardingStore';
+import { usePostHog } from 'posthog-react-native';
 
 const { width, height } = Dimensions.get('window');
 
@@ -45,6 +46,12 @@ export default function ScreenTimePermissionScreen() {
   const slideUp   = useRef(new Animated.Value(30)).current;
   const btnScale  = useRef(new Animated.Value(1)).current;
   const iconPulse = useRef(new Animated.Value(1)).current;
+
+   const posthog = usePostHog()
+  
+    useEffect(() => {
+      posthog.capture('onboarding_step_viewed', { step: 'screentime' })
+    }, [])
 
   useEffect(() => {
     Animated.parallel([
@@ -94,7 +101,7 @@ export default function ScreenTimePermissionScreen() {
 
   const handleSkip = useCallback(() => {
     setHasSeenScreenTimePrompt();
-    router.replace('/(tabs)');
+    router.replace('/(onboarding)/notifications');
   }, []);
 
   if (!fontsLoaded) return null;

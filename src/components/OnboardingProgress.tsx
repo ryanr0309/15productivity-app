@@ -6,7 +6,7 @@ import React from 'react';
 
 export function OnboardingProgress({
   step,           // 1-indexed current step
-  total = 14,
+  total = 13,
 }: {
   step: number;
   total?: number;

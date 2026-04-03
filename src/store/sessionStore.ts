@@ -4,6 +4,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
+import * as StoreReview from 'expo-store-review';
 import { saveSession } from '../services/sessionService';
 import { startBlocking, stopBlocking } from '../services/screenTimeService';
 import {
@@ -14,10 +15,11 @@ import {
 import { LiveActivity } from '../lib/liveActivity';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-export const CHECKPOINT_INTERVAL_SEC = 0.5 * 60;
+export const CHECKPOINT_INTERVAL_SEC = 25 * 60;
 export const CHECKPOINT_BREAK_SEC    = 5 * 60;
 
-const STORAGE_KEY = 'ember_session_v1';
+const STORAGE_KEY         = 'ember_session_v1';
+const REVIEW_PROMPTED_KEY = '@ember/reviewPrompted';
 
 // ─── Persisted shape ──────────────────────────────────────────────────────────
 interface PersistedSession {
@@ -51,9 +53,6 @@ interface SessionState {
 
 // ─── Module-level interval ────────────────────────────────────────────────────
 let _interval: ReturnType<typeof setInterval> | null = null;
-
-// Guard flag — prevents _tick from firing the end logic more than once
-// if the interval fires a second time before stopInterval() takes effect.
 let _sessionEndFired = false;
 
 function startInterval() {
@@ -77,6 +76,26 @@ async function clearPersisted() {
   catch (e) { console.warn('[Ember] Failed to clear session:', e); }
 }
 
+// ─── Review prompt ────────────────────────────────────────────────────────────
+// Called directly (no hook) — safe to use outside React components.
+// Fires once ever after the first NATURAL session completion.
+async function maybeRequestReview() {
+  try {
+    const alreadyPrompted = await AsyncStorage.getItem(REVIEW_PROMPTED_KEY);
+    if (alreadyPrompted) return;
+
+    const isAvailable = await StoreReview.isAvailableAsync();
+    if (!isAvailable) return;
+
+    // Let the session-complete celebration render before the prompt appears
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    await StoreReview.requestReview();
+    await AsyncStorage.setItem(REVIEW_PROMPTED_KEY, 'true');
+  } catch (e) {
+    console.warn('[Ember] Review prompt error:', e);
+  }
+}
+
 // ─── Store ────────────────────────────────────────────────────────────────────
 export const useSessionStore = create<SessionState>((set, get) => ({
   goal:             '',
@@ -90,11 +109,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   breakStartedAt:   null,
 
   startSession: async (goal, durationSec = 25 * 60) => {
-
     stopInterval();
     const { useOnboardingStore } = await import('./onboardingStore');
     const { screenTimeSelectionId } = useOnboardingStore.getState();
-    
+
     if (screenTimeSelectionId) {
       await startBlocking(durationSec, goal);
     }
@@ -113,41 +131,32 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       checkpointsTaken: 0, breakStartedAt: null,
     });
 
-    // Schedule a local notification to fire when the session naturally ends.
-    // This fires even if the app is killed — iOS delivers it locally.
     await scheduleSessionEndNotification(durationSec, goal);
-
     startInterval();
     await LiveActivity.start(goal, durationSec);
   },
 
   stopSession: async () => {
-    // User manually stopped — cancel the scheduled end notification so it
-    // doesn't fire at the original end time after the session is already over.
+    // Manual stop — cancel the scheduled notification immediately.
+    // This must come FIRST before anything else so iOS doesn't deliver
+    // the scheduled notification moments later after the session ends.
     await cancelSessionEndNotification();
 
     await stopBlocking();
     stopInterval();
     const s = get();
-    console.log('[Ember] stopSession saving:', {
-      goal:          s.goal,
-      startedAt:     s.startedAt,
-      startedAtDate: s.startedAt ? new Date(s.startedAt).toISOString() : 'NULL',
-      elapsed:       s.elapsed,
-      durationSec:   s.durationSec,
-      checkpoints:   s.checkpointsTaken,
-    });
     await saveSession({
       goal:         s.goal,
       startedAt:    s.startedAt!,
       elapsed:      s.elapsed,
       durationSec:  s.durationSec,
-      wasCompleted: s.elapsed >= s.durationSec,
+      wasCompleted: false,
       checkpoints:  s.checkpointsTaken,
     });
     set({ isRunning: false });
     await clearPersisted();
     await LiveActivity.end(false);
+    // No review prompt on manual stop
   },
 
   resetSession: async () => {
@@ -201,9 +210,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const elapsed = Math.floor((Date.now() - startedAt) / 1000);
 
     if (elapsed >= durationSec) {
-      
-      // Guard: only run end logic once even if _tick fires again before
-      // the interval is fully cleared (can happen in the same JS turn).
+      // Guard: only run once even if interval fires a second time before clearing
       if (_sessionEndFired) return;
       _sessionEndFired = true;
 
@@ -212,7 +219,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       clearPersisted();
 
       const s = get();
+
       stopBlocking().catch(e => console.warn('[Ember] stopBlocking error:', e));
+
       saveSession({
         goal:         s.goal,
         startedAt:    s.startedAt!,
@@ -222,13 +231,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         checkpoints:  s.checkpointsTaken,
       }).catch(e => console.warn('[Ember] saveSession error:', e));
 
-      // Cancel the scheduled notification and replace it with an immediate one.
-      // cancelSessionEndNotification() MUST be called before send so that
-      // the scheduled one doesn't fire a second later alongside the immediate one.
-      
+      // ── Notification fix ──────────────────────────────────────────────────
+      // Cancel FIRST (awaited in sequence via .then) so the scheduled
+      // notification is definitely gone before the immediate one is sent.
+      // This is the only way to guarantee exactly one notification fires.
       cancelSessionEndNotification()
         .then(() => sendSessionEndedNotification(s.goal))
-        .catch(e => console.warn('[Ember] session end notification error:', e));
+        .catch(e => console.warn('[Ember] notification error:', e));
+
+      LiveActivity.end(true).catch(() => {});
+
+      // ── Review prompt ─────────────────────────────────────────────────────
+      // Fires 1.5s after natural completion, only once ever.
+      maybeRequestReview().catch(() => {});
 
       return;
     }

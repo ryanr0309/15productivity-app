@@ -21,6 +21,7 @@ import {
 import { COLORS, FONTS } from '../../theme';
 import { OnboardingProgress } from '../../components/OnboardingProgress';
 import { useOnboardingStore } from '../../store/onboardingStore';
+import { usePostHog } from 'posthog-react-native';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -81,6 +82,12 @@ export default function PainScreen() {
 
   // Background red bleed — grows when moments play
   const bgBleed = useRef(new Animated.Value(0)).current;
+
+  const posthog = usePostHog()
+
+  useEffect(() => {
+    posthog.capture('onboarding_step_viewed', { step: 'pain' })
+  }, [])
 
   useEffect(() => {
     // 1. Header in

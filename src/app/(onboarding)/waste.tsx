@@ -23,6 +23,7 @@ import {
 import { COLORS, FONTS } from '../../theme';
 import { OnboardingProgress } from '../../components/OnboardingProgress';
 import { useOnboardingStore } from '../../store/onboardingStore';
+import { usePostHog } from 'posthog-react-native';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -40,7 +41,7 @@ function calcStats(age: number, dailyHours: number) {
   // Hours phone / day → hours/year → years
   const yearsOnPhone     = (dailyHours * 365) / 8760; // 8760h in a year
   const yearsWasted      = Math.round(yearsOnPhone * yearsLeft * 10) / 10;
-  const wastedDays       = Math.round(dailyHours * 365);
+  const wastedDays = Math.round((dailyHours / 24) * 365);
   const wastedHours      = Math.round(dailyHours * 365 * yearsLeft);
 
   // Which cells are which
@@ -156,6 +157,12 @@ export default function WasteScreen() {
   // Pulse on the wasted number once revealed
   const numberPulse = useRef(new Animated.Value(1)).current;
 
+  const posthog = usePostHog()
+  
+    useEffect(() => {
+      posthog.capture('onboarding_step_viewed', { step: 'waste' })
+    }, [])
+    
   useEffect(() => {
     // 1. Header fades in
     Animated.sequence([
@@ -218,6 +225,8 @@ export default function WasteScreen() {
   }
 
   const yearsDisplay = displayYears.toFixed(1);
+
+   
 
   return (
     <View style={styles.root}>

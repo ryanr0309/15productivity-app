@@ -36,6 +36,7 @@ import {
 import { COLORS, FONTS } from '../../theme';
 import { OnboardingProgress } from '../../components/OnboardingProgress';
 import { useOnboardingStore } from '../../store/onboardingStore';
+import { usePostHog } from 'posthog-react-native';
 
 const { width: SW } = Dimensions.get('window');
 const PAD = 28;
@@ -480,6 +481,12 @@ export default function PlanScreen() {
     ]).start(cb ? ({ finished }) => { if (finished) cb(); } : undefined);
   };
 
+   const posthog = usePostHog()
+  
+    useEffect(() => {
+      posthog.capture('onboarding_step_viewed', { step: 'plan' })
+    }, [])
+
   useEffect(() => {
     // Loading dots
     const dotLoop = Animated.loop(Animated.stagger(220, [
@@ -743,7 +750,7 @@ export default function PlanScreen() {
           <Animated.View style={[styles.ctaWrap, { opacity: ctaA, transform: [{ translateY: ctaY }] }]}>
             <TouchableOpacity
               style={styles.ctaBtn}
-              onPress={() => router.push('/(onboarding)/commitment')}
+              onPress={() => router.push('/(onboarding)/code')}
               activeOpacity={0.88}
             >
               <LinearGradient

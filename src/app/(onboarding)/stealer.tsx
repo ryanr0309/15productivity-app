@@ -14,6 +14,7 @@ import { OnboardingProgress } from '../../components/OnboardingProgress';
 import { useOnboardingStore } from '../../store/onboardingStore';
 import { QuestionLayout } from '../../components/QuestionLayout';
 import { ChoiceButton } from '../../components/ChoiceButton';
+import { usePostHog } from 'posthog-react-native';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -37,6 +38,12 @@ export default function StealerScreen() {
       router.push('/(onboarding)/window');
     }
   };
+
+   const posthog = usePostHog()
+  
+    useEffect(() => {
+      posthog.capture('onboarding_step_viewed', { step: 'stealer' })
+    }, [])
 
   if (!fontsLoaded) return null;
 

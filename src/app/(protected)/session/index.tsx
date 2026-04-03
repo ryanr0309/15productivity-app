@@ -208,8 +208,15 @@ export default function SessionScreen() {
                 strokeDasharray={RING_CIRCUM} strokeDashoffset={ringOffset}
                 rotation="-90" origin={`${RING_SIZE/2}, ${RING_SIZE/2}`} />
             </Svg>
+            <View style={styles.mascotWrap}>
+  <Image
+    source={require('../../../../assets/images/emberht.png')}
+    style={{ width: RING_R * 1.5, height: RING_R * 1.5 }}
+    resizeMode="contain"
+  />
+</View>
           </View>
-
+   
           {/* ── Timer ── */}
           <Text style={styles.timer}>{timeDisplay}</Text>
 

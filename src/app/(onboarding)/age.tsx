@@ -13,6 +13,7 @@ import {
 import { COLORS, FONTS } from '../../theme';
 import { OnboardingProgress } from '../../components/OnboardingProgress';
 import { useOnboardingStore } from '../../store/onboardingStore';
+import { usePostHog } from 'posthog-react-native';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -52,6 +53,12 @@ export default function AgeScreen() {
   const ctaA    = useRef(new Animated.Value(0)).current;
   const ctaY    = useRef(new Animated.Value(14)).current;
   const copyA   = useRef(new Animated.Value(1)).current;
+  
+  const posthog = usePostHog()
+
+  useEffect(() => {
+    posthog.capture('onboarding_step_viewed', { step: 'age' })
+  }, [])
 
   useEffect(() => {
     Animated.sequence([

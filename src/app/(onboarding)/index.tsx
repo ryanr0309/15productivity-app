@@ -24,14 +24,16 @@ import {
 } from '@expo-google-fonts/nunito';
 import { COLORS, FONTS } from '../../theme';
 import { useOnboardingStore } from '../../store/onboardingStore';
+import { usePostHog } from 'posthog-react-native'
 
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
+
 export default function WelcomeScreen() {
 
     
-    
+  const posthog = usePostHog()
   const insets = useSafeAreaInsets();
   const [fontsLoaded] = useFonts({
     Nunito_800ExtraBold,
@@ -70,6 +72,10 @@ export default function WelcomeScreen() {
     }))
   ).current;
 
+  
+   useEffect(() => {
+    posthog.capture('onboarding_step_viewed', { step: 'welcome' })
+  }, [])
   
   useEffect(() => {
     // Staggered entrance sequence
@@ -254,7 +260,7 @@ export default function WelcomeScreen() {
             └─────────────────────────────────────────────┘
           */}
           <Image
-  source={require('../../assets/images/embert.png')}
+  source={require('../../../assets/images/embert.png')}
   style={{ width: 220, height: 260, resizeMode: 'contain', borderRadius: 1000 }}
 />
 

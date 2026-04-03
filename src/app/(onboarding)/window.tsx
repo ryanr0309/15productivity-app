@@ -16,6 +16,7 @@ import { OnboardingProgress } from '../../components/OnboardingProgress';
 import { useOnboardingStore } from '../../store/onboardingStore';
 import { QuestionLayout } from '../../components/QuestionLayout';
 import { ChoiceButton } from '../../components/ChoiceButton';
+import { usePostHog } from 'posthog-react-native';
 
 const WINDOW_OPTIONS = [
   { icon: '⚡', label: 'Under 10 minutes',  sublabel: 'My mind wanders almost immediately' },
@@ -30,6 +31,13 @@ export default function QWindowScreen() {
   const [selected, setSelected] = useState<string | null>(null);
   const setAnswer = useOnboardingStore(s => s.setAnswer);
 
+
+   const posthog = usePostHog()
+  
+    useEffect(() => {
+      posthog.capture('onboarding_step_viewed', { step: 'window' })
+    }, [])
+    
   const handleContinue = () => {
     if (selected) {
       setAnswer('focusWindow', selected);

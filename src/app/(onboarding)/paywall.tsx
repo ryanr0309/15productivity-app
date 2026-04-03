@@ -22,6 +22,7 @@ import { COLORS, FONTS } from '../../theme';
 import { useOnboardingStore } from '../../store/onboardingStore';
 import Purchases from 'react-native-purchases';
 import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
+import { usePostHog } from 'posthog-react-native';
 
 const RC_ENTITLEMENT_ID = 'Fifteen Pro';
 const { width: SW } = Dimensions.get('window');
@@ -128,7 +129,7 @@ export default function PaywallScreen() {
       if (cancelled) return;
       setRcReady(ready);
       if (ready) {
-        presentRCPaywall();
+  
       } else {
         console.warn('RevenueCat did not initialise in time — showing fallback UI');
       }
@@ -172,6 +173,12 @@ export default function PaywallScreen() {
       setPresenting(false);
     }
   };
+  
+  const posthog = usePostHog()
+
+  useEffect(() => {
+    posthog.capture('onboarding_step_viewed', { step: 'paywall' })
+  }, [])
 
   // Re-check if user paid on another device / via Settings
   useEffect(() => {
@@ -270,6 +277,7 @@ export default function PaywallScreen() {
             </LinearGradient>
           </TouchableOpacity>
 
+
           <Text style={styles.ctaFine}>
             Free for 3 days. Cancel anytime before trial ends — you won't be charged.
           </Text>
@@ -362,4 +370,11 @@ const styles = StyleSheet.create({
   footer:     { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
   footerLink: { fontFamily: FONTS.regular, fontSize: 11, color: 'rgba(255,244,230,0.28)', textDecorationLine: 'underline' },
   footerDot:  { color: 'rgba(255,244,230,0.18)', fontSize: 11 },
+
+  promoLink: {
+  fontFamily: FONTS.regular,
+  fontSize: 13,
+  color: 'rgba(255,244,230,0.35)',
+  textDecorationLine: 'underline',
+},
 });

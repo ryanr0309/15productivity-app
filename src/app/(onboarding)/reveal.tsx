@@ -31,6 +31,7 @@ import {
 } from '@expo-google-fonts/nunito';
 import { COLORS, FONTS } from '../../theme';
 import { OnboardingProgress } from '../../components/OnboardingProgress';
+import { usePostHog } from 'posthog-react-native';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const PAD   = 24;
@@ -136,6 +137,12 @@ function BlockingDemo() {
       Animated.timing(shakeAnims[i], { toValue:  0, duration: 55, useNativeDriver: true }),
     ]).start(() => setTapped(null));
   };
+
+   const posthog = usePostHog()
+  
+    useEffect(() => {
+      posthog.capture('onboarding_step_viewed', { step: 'reveal' })
+    }, [])
 
   return (
     <PhoneFrame>
@@ -265,7 +272,7 @@ function SessionDemo() {
           <LinearGradient colors={['rgba(255,144,48,0.10)','rgba(255,94,14,0.05)']} style={StyleSheet.absoluteFill} />
           <Text style={ss.summaryTxt}>
             {dur}-min session · <Text style={ss.summaryAccent}>{goal}</Text>
-            {'\n'}checkpoint every {Math.floor(dur / 2)}m
+            {'\n'}checkpoint every 25m
           </Text>
         </View>
         <Animated.View style={{ transform: [{ scale: btnS }] }}>
@@ -386,10 +393,10 @@ const tt = StyleSheet.create({
 // DEMO 4 — CHECKPOINT / GAME MENU
 // ─────────────────────────────────────────────────────────────────────────────
 const GAMES = [
-  { icon: '🎯', name: 'Target Tap',   desc: 'Reflex',  col: '#FF6030' },
-  { icon: '🧩', name: 'Pattern Lock', desc: 'Memory',  col: '#8866FF' },
-  { icon: '⚡', name: 'Speed Sort',   desc: 'Speed',   col: '#FFCC33' },
-  { icon: '🌊', name: 'Flow State',   desc: 'Calm',    col: '#44BBFF' },
+  { icon: '🎯', name: 'Simon Says',   desc: 'Memory',  col: '#FF6030' },
+  { icon: '🧩', name: 'Stack Blocks', desc: 'Reflex',  col: '#8866FF' },
+  { icon: '⚡', name: 'Snake Game',   desc: 'Speed',   col: '#FFCC33' },
+  { icon: '🌊', name: 'Breathe',   desc: 'Calm',    col: '#44BBFF' },
 ];
 
 function CheckpointDemo() {

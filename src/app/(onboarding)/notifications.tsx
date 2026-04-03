@@ -20,6 +20,7 @@ import {
 import { COLORS, FONTS } from '../../theme';
 import { OnboardingProgress } from '../../components/OnboardingProgress';
 import { requestNotificationPermission } from '../../lib/sessionNotifications';
+import { usePostHog } from 'posthog-react-native';
 
 const FEATURES = [
   { icon: '⏱', text: 'Know the moment your session ends' },
@@ -43,6 +44,12 @@ export default function NotificationsPermissionScreen() {
 
   // Bell pulse
   const bellScale = useRef(new Animated.Value(1)).current;
+
+  const posthog = usePostHog()
+
+  useEffect(() => {
+    posthog.capture('onboarding_step_viewed', { step: 'notifications' })
+  }, [])
 
   useEffect(() => {
     Animated.sequence([
@@ -106,12 +113,7 @@ export default function NotificationsPermissionScreen() {
 
       {/* Top bar */}
       <View style={[styles.topBar, { paddingTop: insets.top + 14 }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
-          <Text style={styles.backArrow}>←</Text>
-        </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <OnboardingProgress step={7} />
-        </View>
+  
         <View style={{ width: 36 }} />
       </View>
 

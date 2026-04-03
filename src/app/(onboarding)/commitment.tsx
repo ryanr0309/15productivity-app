@@ -27,6 +27,7 @@ import {
 import { COLORS, FONTS } from '../../theme';
 import { OnboardingProgress } from '../../components/OnboardingProgress';
 import { useOnboardingStore } from '../../store/onboardingStore';
+import { usePostHog } from 'posthog-react-native';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const PAD = 28;
@@ -337,6 +338,12 @@ export default function CommitmentScreen() {
   const headerY = useRef(new Animated.Value(16)).current;
   const holdA   = useRef(new Animated.Value(0)).current;
   const holdY   = useRef(new Animated.Value(20)).current;
+
+  const posthog = usePostHog()
+
+  useEffect(() => {
+    posthog.capture('onboarding_step_viewed', { step: 'commitment' })
+  }, [])
 
   useEffect(() => {
     Animated.sequence([

@@ -378,7 +378,7 @@ useEffect(() => {
                 >
                  
                   <Image
-          source={require('../../../assets/images/embert.png')}
+          source={require('../../../../assets/images/embert.png')}
           style={{ width: 220, height: 260, resizeMode: 'contain', borderRadius: 1000 }}
         />
         
