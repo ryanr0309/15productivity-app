@@ -1,47 +1,10 @@
-// app.config.js
+
+/* eslint-disable no-undef */
 const BUNDLE_ID = 'com.ryan.fifteen';
 const TEAM_ID   = 'YW69L3H994';
 const APP_GROUP = `group.${BUNDLE_ID}`;
 
-/* eslint-disable no-undef */
-
-const { withXcodeProject, withDangerousMod } = require('@expo/config-plugins');
-const fs = require('fs');
-const path = require('path');
-
-function withTikTokXCFramework(config) {
-  // First, copy the xcframework into the ios directory
-  config = withDangerousMod(config, [
-    'ios',
-    (config) => {
-      const src = path.join(config.modRequest.projectRoot, 'vendor', 'TikTokBusinessSDK.xcframework');
-      const dest = path.join(config.modRequest.platformProjectRoot, 'vendor', 'TikTokBusinessSDK.xcframework');
-      
-      if (!fs.existsSync(path.join(config.modRequest.platformProjectRoot, 'vendor'))) {
-        fs.mkdirSync(path.join(config.modRequest.platformProjectRoot, 'vendor'), { recursive: true });
-      }
-      
-      if (fs.existsSync(src) && !fs.existsSync(dest)) {
-        fs.cpSync(src, dest, { recursive: true });
-        console.log('[TikTokFix] Copied xcframework to ios/vendor/');
-      }
-      
-      return config;
-    },
-  ]);
-
-  // Then add it to the Xcode project
-  config = withXcodeProject(config, (config) => {
-    const xcodeProject = config.modResults;
-    xcodeProject.addFramework('vendor/TikTokBusinessSDK.xcframework', {
-      customFramework: true,
-      embed: true,
-    });
-    return config;
-  });
-
-  return config;
-}
+const withTikTokXCFramework = require('./plugins/withTikTok');
 
 module.exports = {
   expo: {
