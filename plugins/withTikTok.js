@@ -34,28 +34,33 @@ function withTikTokXCFramework(config) {
         console.log('[TikTokFix] Removed TikTokBusinessSDK pod dependency');
       }
 
-      // 3. Patch the Podfile to add post_install hook
+      // 3. Inject into existing post_install hook in Podfile
       const podfilePath = path.join(platformRoot, 'Podfile');
       if (fs.existsSync(podfilePath)) {
         let podfile = fs.readFileSync(podfilePath, 'utf8');
-        const hook = `
-# TikTokFix: Add xcframework search path to TikTokBusiness pod
-post_install do |installer|
+
+        const injection = `
+  # TikTokFix: Add xcframework search path
   installer.pods_project.targets.each do |target|
     if target.name == 'TikTokBusiness'
       target.build_configurations.each do |config|
-        config.build_settings['FRAMEWORK_SEARCH_PATHS'] ||= ['$(inherited)']
-        config.build_settings['FRAMEWORK_SEARCH_PATHS'] << '$(PODS_ROOT)/../../vendor'
-        config.build_settings['SWIFT_INCLUDE_PATHS'] ||= ['$(inherited)']
-        config.build_settings['SWIFT_INCLUDE_PATHS'] << '$(PODS_ROOT)/../../vendor'
+        existing = config.build_settings['FRAMEWORK_SEARCH_PATHS'] || ['$(inherited)']
+        existing = [existing] if existing.is_a?(String)
+        existing << '$(PODS_ROOT)/../../vendor'
+        config.build_settings['FRAMEWORK_SEARCH_PATHS'] = existing
       end
     end
   end
-end
 `;
+
         if (!podfile.includes('TikTokFix')) {
-          fs.writeFileSync(podfilePath, podfile + hook);
-          console.log('[TikTokFix] Added post_install hook to Podfile');
+          // Insert at the start of the existing post_install block
+          podfile = podfile.replace(
+            /post_install do \|installer\|/,
+            `post_install do |installer|\n${injection}`
+          );
+          fs.writeFileSync(podfilePath, podfile);
+          console.log('[TikTokFix] Injected into existing post_install hook');
         }
       }
 
