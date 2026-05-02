@@ -1,23 +1,20 @@
 /* eslint-disable no-undef */
-
 const { withXcodeProject, withDangerousMod } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
 function withTikTokXCFramework(config) {
-  // Step 1: Copy xcframework + patch podspec
   config = withDangerousMod(config, [
     'ios',
     (config) => {
+      const projectRoot = config.modRequest.projectRoot;
+      const platformRoot = config.modRequest.platformProjectRoot;
+
       // Copy xcframework to ios/vendor/
-      const src = path.join(config.modRequest.projectRoot, 'vendor', 'TikTokBusinessSDK.xcframework');
-      const destDir = path.join(config.modRequest.platformProjectRoot, 'vendor');
-
-      if (!fs.existsSync(destDir)) {
-        fs.mkdirSync(destDir, { recursive: true });
-      }
-
+      const src = path.join(projectRoot, 'vendor', 'TikTokBusinessSDK.xcframework');
+      const destDir = path.join(platformRoot, 'vendor');
+      if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
       if (fs.existsSync(src)) {
         execSync(`cp -r "${src}" "${destDir}/"`);
         console.log('[TikTokFix] xcframework copied to ios/vendor/');
@@ -25,9 +22,11 @@ function withTikTokXCFramework(config) {
         console.error('[TikTokFix] ERROR: xcframework not found at', src);
       }
 
-      // Patch TikTokBusiness.podspec to remove TikTokBusinessSDK dependency
+      // Patch TikTokBusiness.podspec
+      // The podspec lives at: node_modules/react-native-tiktok-business-sdk/TikTokBusiness.podspec
+      // The ios/vendor folder relative to that podspec is: ../../ios/vendor
       const podspecPath = path.join(
-        config.modRequest.projectRoot,
+        projectRoot,
         'node_modules',
         'react-native-tiktok-business-sdk',
         'TikTokBusiness.podspec'
@@ -35,26 +34,35 @@ function withTikTokXCFramework(config) {
 
       if (fs.existsSync(podspecPath)) {
         let podspec = fs.readFileSync(podspecPath, 'utf8');
-        console.log('[TikTokFix] Original podspec:', podspec);
-        podspec = podspec.replace(/.*s\.dependency.*TikTokBusinessSDK.*\n/g, '');
+        
+        // Remove TikTokBusinessSDK pod dependency
+        podspec = podspec.replace(/\s*s\.dependency\s+['"]TikTokBusinessSDK['"][^\n]*\n/g, '\n');
+        
+        // Add vendored_frameworks pointing to the xcframework
+        // Path from node_modules/react-native-tiktok-business-sdk/ to ios/vendor/
+        if (!podspec.includes('vendored_frameworks')) {
+          podspec = podspec.replace(
+            /end\s*$/,
+            `  s.vendored_frameworks = '../../ios/vendor/TikTokBusinessSDK.xcframework'\nend\n`
+          );
+        }
+
         fs.writeFileSync(podspecPath, podspec);
-        console.log('[TikTokFix] Patched podspec, removed TikTokBusinessSDK dependency');
+        console.log('[TikTokFix] Patched podspec contents:\n', podspec);
       } else {
-        console.error('[TikTokFix] ERROR: podspec not found at', podspecPath);
+        console.error('[TikTokFix] ERROR: podspec not found');
       }
 
       return config;
     },
   ]);
 
-  // Step 2: Add xcframework to Xcode project
   config = withXcodeProject(config, (config) => {
     const xcodeProject = config.modResults;
     xcodeProject.addFramework('vendor/TikTokBusinessSDK.xcframework', {
       customFramework: true,
       embed: true,
     });
-    console.log('[TikTokFix] Added xcframework to Xcode project');
     return config;
   });
 
