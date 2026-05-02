@@ -17,14 +17,10 @@ function withTikTokXCFramework(config) {
       if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
       if (fs.existsSync(src)) {
         execSync(`cp -r "${src}" "${destDir}/"`);
-        console.log('[TikTokFix] xcframework copied to ios/vendor/');
-      } else {
-        console.error('[TikTokFix] ERROR: xcframework not found at', src);
+        console.log('[TikTokFix] xcframework copied');
       }
 
       // Patch TikTokBusiness.podspec
-      // The podspec lives at: node_modules/react-native-tiktok-business-sdk/TikTokBusiness.podspec
-      // The ios/vendor folder relative to that podspec is: ../../ios/vendor
       const podspecPath = path.join(
         projectRoot,
         'node_modules',
@@ -34,23 +30,18 @@ function withTikTokXCFramework(config) {
 
       if (fs.existsSync(podspecPath)) {
         let podspec = fs.readFileSync(podspecPath, 'utf8');
-        
-        // Remove TikTokBusinessSDK pod dependency
         podspec = podspec.replace(/\s*s\.dependency\s+['"]TikTokBusinessSDK['"][^\n]*\n/g, '\n');
-        
-        // Add vendored_frameworks pointing to the xcframework
-        // Path from node_modules/react-native-tiktok-business-sdk/ to ios/vendor/
         if (!podspec.includes('vendored_frameworks')) {
           podspec = podspec.replace(
             /end\s*$/,
-            `  s.vendored_frameworks = '../../ios/vendor/TikTokBusinessSDK.xcframework'\nend\n`
+            `  s.vendored_frameworks = '../../ios/vendor/TikTokBusinessSDK.xcframework'
+  s.xcconfig = { 'FRAMEWORK_SEARCH_PATHS' => '"$(PODS_ROOT)/../../ios/vendor"' }
+end
+`
           );
         }
-
         fs.writeFileSync(podspecPath, podspec);
-        console.log('[TikTokFix] Patched podspec contents:\n', podspec);
-      } else {
-        console.error('[TikTokFix] ERROR: podspec not found');
+        console.log('[TikTokFix] Patched podspec:\n', podspec);
       }
 
       return config;
