@@ -46,7 +46,7 @@ function withTikTokXCFramework(config) {
       target.build_configurations.each do |config|
         existing = config.build_settings['FRAMEWORK_SEARCH_PATHS'] || ['$(inherited)']
         existing = [existing] if existing.is_a?(String)
-        existing << '$(PODS_ROOT)/../../vendor'
+        existing << '$(PODS_ROOT)/../vendor'
         config.build_settings['FRAMEWORK_SEARCH_PATHS'] = existing
       end
     end
